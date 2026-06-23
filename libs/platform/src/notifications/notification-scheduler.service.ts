@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { type DrizzleDB, type DbExecutor } from '../database/drizzle.provider';
 import { notificationOutbox } from '../../../../db/schema';
 import { type NotificationTemplateName, type NotificationTemplateVars } from './notification.templates';
+import { NotificationPubSubService } from './notification-pubsub.service';
 
 export interface ScheduleNotificationInput<K extends NotificationTemplateName> {
   type:            K;
@@ -17,9 +18,12 @@ export interface ScheduleNotificationInput<K extends NotificationTemplateName> {
  * inside the caller's existing DB transaction.
  *
  * The relay (NotificationRelayService) reads these rows every 5 s.
+ * A wake signal is published to Redis after each insert for near-zero latency.
  */
 @Injectable()
 export class NotificationSchedulerService {
+  constructor(private readonly pubSub: NotificationPubSubService) {}
+
   async schedule<K extends NotificationTemplateName>(
     tx:    DbExecutor,
     input: ScheduleNotificationInput<K>,
@@ -36,5 +40,9 @@ export class NotificationSchedulerService {
         idempotencyKey: input.idempotencyKey ?? null,
       })
       .onConflictDoNothing({ target: notificationOutbox.idempotencyKey });
+
+    // Best-effort wake signal — reduces relay latency from ≤5s to ~ms.
+    // Fire-and-forget; correctness is guaranteed by cron polling regardless.
+    this.pubSub.wakeRelay().catch(() => { /* non-critical */ });
   }
 }

@@ -1,94 +1,157 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { InjectDrizzle, type DrizzleDB } from '@platform';
-import { sql } from 'drizzle-orm';
-import { notificationOutbox } from '../../../../../db/schema';
+/**
+ * NotificationRelayService — polls notification_outbox and dispatches in-app
+ * notifications via NotificationsService.
+ *
+ * Extends AbstractOutboxRelay which owns the polling loop, concurrency guard,
+ * transaction management, and retry/fail logic.
+ *
+ * Adaptive polling:
+ *   NotificationSchedulerService.schedule() publishes a relay:wake signal to
+ *   Redis immediately after writing to notification_outbox.  onModuleInit()
+ *   subscribes and calls super.relay() directly — delivery latency drops from
+ *   ≤5s (cron) to ~ms (wake signal).  The 5s cron is the catch-all fallback.
+ *
+ * Post-commit SSE push:
+ *   processRow() returns a PostCommitTask that publishes to Redis AFTER the
+ *   transaction commits so the SSE controller never receives an event before
+ *   in_app_notifications is durable.
+ */
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { and, asc, eq, lt } from 'drizzle-orm';
+import { InjectDrizzle } from '@platform';
+import type { DrizzleDB, DrizzleTx } from '@platform';
+import { AbstractOutboxRelay } from '@platform';
+import type { PostCommitTask } from '@platform';
 import {
   renderNotification,
-  type NotificationTemplateName,
-  type NotificationTemplateVars,
+  NotificationPubSubService,
 } from '@platform/notifications';
+import type { NotificationTemplateName, NotificationTemplateVars } from '@platform/notifications';
+import { notificationOutbox } from '../../../../../db/schema';
 import { NotificationsService } from './notifications.service';
+import { NotificationPreferencesService } from './notification-preferences.service';
 
-const BATCH_SIZE   = 50;
-const MAX_ATTEMPTS = 5;
+type NotificationOutboxRow = {
+  id: string;
+  recipientId: string;
+  actorId: string | null;
+  type: string;
+  vars: unknown;
+  resourceId: string | null;
+  attempts: number;
+  idempotencyKey: string | null;
+};
 
-/**
- * NotificationRelayService — polls notification_outbox every 5 s using
- * SELECT … FOR UPDATE SKIP LOCKED (safe for multi-instance deployments).
- */
 @Injectable()
-export class NotificationRelayService {
-  private readonly logger = new Logger(NotificationRelayService.name);
-  private isRunning = false;
+export class NotificationRelayService
+  extends AbstractOutboxRelay<NotificationOutboxRow>
+  implements OnModuleInit, OnModuleDestroy
+{
+  private unsubscribeRelayWake?: () => Promise<void>;
 
   constructor(
-    @InjectDrizzle() private readonly db: DrizzleDB,
+    @InjectDrizzle() db: DrizzleDB,
     private readonly notificationsService: NotificationsService,
-  ) {}
-
-  @Cron(CronExpression.EVERY_5_SECONDS)
-  async relay(): Promise<void> {
-    if (this.isRunning) return;
-    this.isRunning = true;
-    try {
-      await this.processBatch();
-    } finally {
-      this.isRunning = false;
-    }
+    private readonly pubSub: NotificationPubSubService,
+    private readonly prefs: NotificationPreferencesService,
+  ) {
+    super(db);
   }
 
-  private async processBatch(): Promise<void> {
-    await this.db.transaction(async (tx) => {
-      const rows = await tx.execute(sql`
-        SELECT *
-        FROM messaging.notification_outbox
-        WHERE status = 'pending'
-          AND attempts < ${MAX_ATTEMPTS}
-          AND scheduled_at <= now()
-        ORDER BY scheduled_at
-        LIMIT ${BATCH_SIZE}
-        FOR UPDATE SKIP LOCKED
-      `);
-
-      if (!rows.rows.length) return;
-
-      for (const row of rows.rows as Array<Record<string, unknown>>) {
-        const id            = row.id as string;
-        const type          = row.type as NotificationTemplateName;
-        const vars          = row.vars as NotificationTemplateVars[typeof type];
-        const recipientId   = row.recipient_id as string;
-        const actorId       = row.actor_id as string | null;
-        const resourceId    = row.resource_id as string | null;
-
-        try {
-          const rendered = renderNotification(type, vars as never);
-          await this.notificationsService.send({
-            recipientId,
-            actorId:       actorId    ?? undefined,
-            type,
-            title:         rendered.title,
-            body:          rendered.body,
-            resourceId:    resourceId ?? undefined,
-            sourceEventId: id,
-          });
-
-          await tx.execute(sql`
-            UPDATE messaging.notification_outbox
-            SET status = 'dispatched', dispatched_at = now(), attempts = attempts + 1
-            WHERE id = ${id}
-          `);
-        } catch (err) {
-          this.logger.warn({ err, id }, 'Notification relay failed for row');
-          await tx.execute(sql`
-            UPDATE messaging.notification_outbox
-            SET attempts = attempts + 1,
-                last_error = ${String(err)},
-                status = CASE WHEN attempts + 1 >= ${MAX_ATTEMPTS} THEN 'dead' ELSE 'pending' END
-            WHERE id = ${id}
-          `);
-        }
-      }
+  async onModuleInit(): Promise<void> {
+    this.logger.log('Notification relay started — polling notification_outbox every 5s');
+    this.unsubscribeRelayWake = await this.pubSub.subscribeRelayWake(() => {
+      this.relay().catch((err) =>
+        this.logger.error({ err }, 'Notification relay triggered by wake signal failed'),
+      );
     });
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.unsubscribeRelayWake?.();
+  }
+
+  @Cron('*/5 * * * * *', { name: 'notification-relay' })
+  override async relay(): Promise<void> {
+    return super.relay();
+  }
+
+  // ── AbstractOutboxRelay implementation ────────────────────────────────────
+
+  protected async fetchBatch(tx: DrizzleTx): Promise<NotificationOutboxRow[]> {
+    return tx
+      .select({
+        id:             notificationOutbox.id,
+        recipientId:    notificationOutbox.recipientId,
+        actorId:        notificationOutbox.actorId,
+        type:           notificationOutbox.type,
+        vars:           notificationOutbox.vars,
+        resourceId:     notificationOutbox.resourceId,
+        attempts:       notificationOutbox.attempts,
+        idempotencyKey: notificationOutbox.idempotencyKey,
+      })
+      .from(notificationOutbox)
+      .where(and(eq(notificationOutbox.status, 'pending'), lt(notificationOutbox.attempts, this.maxAttempts)))
+      .orderBy(asc(notificationOutbox.scheduledAt))
+      .limit(this.batchSize)
+      .for('update', { skipLocked: true });
+  }
+
+  protected async processRow(row: NotificationOutboxRow): Promise<PostCommitTask | void> {
+    // Check in-app preference before dispatching.
+    const inAppEnabled = await this.prefs.isInAppEnabled(row.recipientId, row.type);
+    if (!inAppEnabled) {
+      this.logger.debug({ recipientId: row.recipientId, type: row.type }, 'In-app notification suppressed by preference');
+      return; // AbstractOutboxRelay marks the row as sent (dispatched)
+    }
+
+    const type    = row.type as NotificationTemplateName;
+    const vars    = row.vars as NotificationTemplateVars[typeof type];
+    const rendered = renderNotification(type, vars as never);
+
+    const notification = await this.notificationsService.send({
+      recipientId:   row.recipientId,
+      actorId:       row.actorId    ?? undefined,
+      type,
+      title:         rendered.title,
+      body:          rendered.body,
+      resourceId:    row.resourceId ?? undefined,
+      sourceEventId: row.idempotencyKey ?? row.id,
+    });
+
+    // If notification was deduplicated (already exists), no SSE push needed.
+    if (!notification) return;
+
+    return async () => {
+      await this.pubSub.notifyUser({
+        notificationId: notification.id,
+        recipientId:    row.recipientId,
+        type,
+        title:          rendered.title,
+        body:           rendered.body,
+        resourceId:     row.resourceId ?? undefined,
+      });
+    };
+  }
+
+  protected async markSent(tx: DrizzleTx, rowId: string): Promise<void> {
+    await tx
+      .update(notificationOutbox)
+      .set({ status: 'dispatched', dispatchedAt: new Date() })
+      .where(eq(notificationOutbox.id, rowId));
+  }
+
+  protected async markFailed(
+    tx: DrizzleTx,
+    rowId: string,
+    newAttempts: number,
+    newStatus: 'pending' | 'failed',
+    lastError: string,
+  ): Promise<void> {
+    await tx
+      .update(notificationOutbox)
+      .set({ attempts: newAttempts, status: newStatus === 'failed' ? 'dead' : 'pending', lastError })
+      .where(eq(notificationOutbox.id, rowId));
   }
 }

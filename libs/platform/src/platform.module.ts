@@ -20,6 +20,7 @@ import { ResendEmailProvider } from './email/providers/resend.provider';
 import { EmailService } from './email/email.service';
 import { EmailSchedulerService } from './email/email-scheduler.service';
 import { NotificationSchedulerService } from './notifications/notification-scheduler.service';
+import { NotificationPubSubService } from './notifications/notification-pubsub.service';
 
 /**
  * Platform module — cross-cutting infrastructure shared by every bounded context:
@@ -79,6 +80,7 @@ import { NotificationSchedulerService } from './notifications/notification-sched
     EmailService,
     EmailSchedulerService,
     NotificationSchedulerService,
+    NotificationPubSubService,
   ],
   exports: [
     AppConfigModule,
@@ -94,6 +96,7 @@ import { NotificationSchedulerService } from './notifications/notification-sched
     EmailService,
     EmailSchedulerService,
     NotificationSchedulerService,
+    NotificationPubSubService,
   ],
 })
 export class PlatformModule {}

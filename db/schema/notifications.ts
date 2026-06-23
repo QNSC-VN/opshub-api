@@ -1,6 +1,7 @@
 /**
- * notifications schema — in_app_notifications
- * Stores all in-app notification records per employee.
+ * notifications schema — in_app_notifications + notification_preferences
+ * Stores all in-app notification records per employee, plus per-user channel
+ * opt-out preferences.
  * Written by the notification relay after reading notification_outbox.
  */
 import {
@@ -33,5 +34,31 @@ export const inAppNotifications = notificationsSchema.table(
     createdIdx:     index('ix_ian_created').on(t.recipientId, t.createdAt),
     resourceIdx:    index('ix_ian_resource').on(t.resourceType, t.resourceId),
     sourceEventIdx: uniqueIndex('uq_ian_source_event_id').on(t.sourceEventId),
+  }),
+);
+
+/**
+ * notification_preferences — per-user channel opt-out configuration.
+ *
+ * type = '*'          → wildcard / master switch (applies to all event types)
+ * type = 'access_request.approved' → specific event type
+ *
+ * Resolution order: specific type row > wildcard ('*') row > default (enabled).
+ * inApp  = false → suppresses in-app delivery for matching notifications.
+ * email  = false → suppresses email delivery for matching notifications.
+ */
+export const notificationPreferences = notificationsSchema.table(
+  'notification_preferences',
+  {
+    id:        uuid('id').primaryKey().defaultRandom(),
+    userId:    uuid('user_id').notNull(),
+    /** '*' = wildcard master switch; specific event type string otherwise. */
+    type:      varchar('type', { length: 100 }).notNull(),
+    inApp:     boolean('in_app').notNull().default(true),
+    email:     boolean('email').notNull().default(true),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userTypeIdx: uniqueIndex('uq_notif_pref_user_type').on(t.userId, t.type),
   }),
 );

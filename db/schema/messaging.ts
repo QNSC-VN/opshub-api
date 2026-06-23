@@ -71,6 +71,13 @@ export const emailOutbox = messagingSchema.table(
     attempts:       integer('attempts').notNull().default(0),
     lastError:      text('last_error'),
     idempotencyKey: varchar('idempotency_key', { length: 255 }),
+    /**
+     * Optional: the internal user ID this email was scheduled for.
+     * Populated for notification emails (e.g. access_request.approved).
+     * NULL for transactional emails without a known recipient user.
+     * Used to check notification_preferences before sending.
+     */
+    recipientId:    uuid('recipient_id'),
     scheduledAt:    timestamp('scheduled_at', { withTimezone: true }).notNull().defaultNow(),
     sentAt:         timestamp('sent_at', { withTimezone: true }),
   },

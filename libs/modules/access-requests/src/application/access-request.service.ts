@@ -8,6 +8,7 @@ import {
   ErrorCodes,
   NotificationSchedulerService,
   EmailSchedulerService,
+  AppConfigService,
 } from '@platform';
 import { AuditService } from '@modules/audit';
 import { newId } from '@shared-kernel';
@@ -33,6 +34,7 @@ export class AccessRequestService {
     private readonly audit: AuditService,
     private readonly notifScheduler: NotificationSchedulerService,
     private readonly emailScheduler: EmailSchedulerService,
+    private readonly config: AppConfigService,
   ) {}
 
   async submit(
@@ -125,7 +127,7 @@ export class AccessRequestService {
             requesterName: requester.displayName,
             resourceName:  request.target,
             approverName:  actor.email,
-            appUrl:        process.env['APP_URL'] ?? 'http://localhost:5173',
+            appUrl:        this.config.get('APP_URL'),
           },
           { idempotencyKey: `email:access_request.approved:${requestId}` },
         );
@@ -192,7 +194,7 @@ export class AccessRequestService {
             resourceName:  request.target,
             approverName:  actor.email,
             reason:        note ?? undefined,
-            appUrl:        process.env['APP_URL'] ?? 'http://localhost:5173',
+            appUrl:        this.config.get('APP_URL'),
           },
           { idempotencyKey: `email:access_request.denied:${requestId}` },
         );

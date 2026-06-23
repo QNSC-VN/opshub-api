@@ -1,80 +1,114 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { InjectDrizzle, type DrizzleDB } from '@platform';
-import { sql } from 'drizzle-orm';
+/**
+ * EmailRelayService — polls email_outbox and dispatches via EmailService.
+ *
+ * Extends AbstractOutboxRelay which owns the polling loop, concurrency guard,
+ * transaction management, and retry/fail logic.
+ *
+ * Adaptive polling:
+ *   EmailSchedulerService.schedule() publishes an email:relay:wake signal to
+ *   Redis immediately after writing to email_outbox.  onModuleInit() subscribes
+ *   and calls super.relay() — delivery latency drops from ≤5s to ~ms.
+ */
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { and, asc, eq, lt } from 'drizzle-orm';
+import { InjectDrizzle } from '@platform';
+import type { DrizzleDB, DrizzleTx } from '@platform';
+import { AbstractOutboxRelay } from '@platform';
+import type { PostCommitTask } from '@platform';
 import { EmailService } from '@platform/email';
 import type { EmailTemplateName, EmailTemplateVars } from '@platform/email';
+import { NotificationPubSubService } from '@platform/notifications';
+import { emailOutbox } from '../../../../../db/schema';
 
-const BATCH_SIZE   = 20;
-const MAX_ATTEMPTS = 5;
+type EmailOutboxRow = {
+  id: string;
+  to: string;
+  template: string;
+  vars: unknown;
+  attempts: number;
+  idempotencyKey: string | null;
+};
 
-/**
- * EmailRelayService — polls email_outbox every 5 s and dispatches via EmailService.
- * Uses SELECT … FOR UPDATE SKIP LOCKED.
- */
 @Injectable()
-export class EmailRelayService {
-  private readonly logger = new Logger(EmailRelayService.name);
-  private isRunning = false;
+export class EmailRelayService
+  extends AbstractOutboxRelay<EmailOutboxRow>
+  implements OnModuleInit, OnModuleDestroy
+{
+  private unsubscribeRelayWake?: () => Promise<void>;
 
   constructor(
-    @InjectDrizzle() private readonly db: DrizzleDB,
+    @InjectDrizzle() db: DrizzleDB,
     private readonly emailService: EmailService,
-  ) {}
-
-  @Cron(CronExpression.EVERY_5_SECONDS)
-  async relay(): Promise<void> {
-    if (this.isRunning) return;
-    this.isRunning = true;
-    try {
-      await this.processBatch();
-    } finally {
-      this.isRunning = false;
-    }
+    private readonly pubSub: NotificationPubSubService,
+  ) {
+    super(db);
   }
 
-  private async processBatch(): Promise<void> {
-    await this.db.transaction(async (tx) => {
-      const rows = await tx.execute(sql`
-        SELECT *
-        FROM messaging.email_outbox
-        WHERE status = 'pending'
-          AND attempts < ${MAX_ATTEMPTS}
-          AND scheduled_at <= now()
-        ORDER BY scheduled_at
-        LIMIT ${BATCH_SIZE}
-        FOR UPDATE SKIP LOCKED
-      `);
-
-      if (!rows.rows.length) return;
-
-      for (const row of rows.rows as Array<Record<string, unknown>>) {
-        const id       = row.id as string;
-        const to       = row.to as string;
-        const template = row.template as EmailTemplateName;
-        const vars     = row.vars as EmailTemplateVars[typeof template];
-
-        try {
-          await this.emailService.sendTemplate(to, template, vars as never, {
-            idempotencyKey: row.idempotency_key as string | undefined,
-          });
-
-          await tx.execute(sql`
-            UPDATE messaging.email_outbox
-            SET status = 'sent', sent_at = now(), attempts = attempts + 1
-            WHERE id = ${id}
-          `);
-        } catch (err) {
-          this.logger.warn({ err, id, to }, 'Email relay failed for row');
-          await tx.execute(sql`
-            UPDATE messaging.email_outbox
-            SET attempts = attempts + 1,
-                last_error = ${String(err)},
-                status = CASE WHEN attempts + 1 >= ${MAX_ATTEMPTS} THEN 'dead' ELSE 'pending' END
-            WHERE id = ${id}
-          `);
-        }
-      }
+  async onModuleInit(): Promise<void> {
+    this.logger.log('Email relay started — polling email_outbox every 5s');
+    this.unsubscribeRelayWake = await this.pubSub.subscribeEmailRelayWake(() => {
+      this.relay().catch((err) =>
+        this.logger.error({ err }, 'Email relay triggered by wake signal failed'),
+      );
     });
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    await this.unsubscribeRelayWake?.();
+  }
+
+  @Cron('*/5 * * * * *', { name: 'email-relay' })
+  override async relay(): Promise<void> {
+    return super.relay();
+  }
+
+  // ── AbstractOutboxRelay implementation ────────────────────────────────────
+
+  protected async fetchBatch(tx: DrizzleTx): Promise<EmailOutboxRow[]> {
+    return tx
+      .select({
+        id:             emailOutbox.id,
+        to:             emailOutbox.to,
+        template:       emailOutbox.template,
+        vars:           emailOutbox.vars,
+        attempts:       emailOutbox.attempts,
+        idempotencyKey: emailOutbox.idempotencyKey,
+      })
+      .from(emailOutbox)
+      .where(and(eq(emailOutbox.status, 'pending'), lt(emailOutbox.attempts, this.maxAttempts)))
+      .orderBy(asc(emailOutbox.scheduledAt))
+      .limit(this.batchSize)
+      .for('update', { skipLocked: true });
+  }
+
+  protected async processRow(row: EmailOutboxRow): Promise<PostCommitTask | void> {
+    await this.emailService.sendTemplate(
+      row.to,
+      row.template as EmailTemplateName,
+      row.vars as EmailTemplateVars[EmailTemplateName],
+      { idempotencyKey: row.idempotencyKey ?? row.id },
+    );
+    // No post-commit work needed — email dispatch is synchronous within processRow.
+  }
+
+  protected async markSent(tx: DrizzleTx, rowId: string): Promise<void> {
+    await tx
+      .update(emailOutbox)
+      .set({ status: 'sent', sentAt: new Date() })
+      .where(eq(emailOutbox.id, rowId));
+  }
+
+  protected async markFailed(
+    tx: DrizzleTx,
+    rowId: string,
+    newAttempts: number,
+    newStatus: 'pending' | 'failed',
+    lastError: string,
+  ): Promise<void> {
+    await tx
+      .update(emailOutbox)
+      .set({ attempts: newAttempts, status: newStatus, lastError })
+      .where(eq(emailOutbox.id, rowId));
   }
 }
