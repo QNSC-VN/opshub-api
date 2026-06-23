@@ -9,3 +9,4 @@ export * from './outbox/index';
 export * from './observability/index';
 export * from './cache/index';
 export * from './resilience/index';
+export * from './rate-limit/index';

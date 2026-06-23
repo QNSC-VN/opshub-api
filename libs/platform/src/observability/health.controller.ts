@@ -3,6 +3,7 @@ import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { sql } from 'drizzle-orm';
 import { Public } from '../auth/decorators';
+import { CacheService } from '../cache/cache.service';
 import { InjectDrizzle } from '../database/drizzle.provider';
 import type { DrizzleDB } from '../database/drizzle.provider';
 
@@ -11,6 +12,7 @@ import type { DrizzleDB } from '../database/drizzle.provider';
 export class HealthController {
   constructor(
     private readonly health: HealthCheckService,
+    private readonly cache: CacheService,
     @InjectDrizzle() private readonly db: DrizzleDB,
   ) {}
 
@@ -22,11 +24,11 @@ export class HealthController {
     return { status: 'ok' };
   }
 
-  /** Readiness probe — can we serve traffic? (DB reachable) */
+  /** Readiness probe — can we serve traffic? (DB + cache reachable) */
   @Get('readyz')
   @Public()
   @HealthCheck()
-  @ApiOperation({ summary: 'Readiness probe — checks database connectivity' })
+  @ApiOperation({ summary: 'Readiness probe — checks database and cache connectivity' })
   async readyz() {
     return this.health.check([
       async () => {
@@ -35,6 +37,21 @@ export class HealthController {
           return { postgres: { status: 'up' } };
         } catch (e) {
           return { postgres: { status: 'down', error: String(e) } };
+        }
+      },
+      async () => {
+        if (!this.cache.isAvailable) {
+          return { redis: { status: 'up', note: 'disabled — REDIS_URL not configured' } };
+        }
+        try {
+          const probeKey = '__readyz_probe__';
+          await this.cache.set(probeKey, '1', 5);
+          const val = await this.cache.get(probeKey);
+          await this.cache.del(probeKey);
+          if (val !== '1') throw new Error('probe read mismatch');
+          return { redis: { status: 'up' } };
+        } catch (e) {
+          return { redis: { status: 'down', error: String(e) } };
         }
       },
     ]);
