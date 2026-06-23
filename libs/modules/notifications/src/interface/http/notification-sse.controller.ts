@@ -79,7 +79,7 @@ export class NotificationSseController {
     // Subscribe to Redis pub/sub for this user's notifications.
     // Multiple browser tabs / devices each get their own subscription.
     const unsubscribe = await this.pubSub.subscribeUser(user.sub, (payload) => {
-      if (!raw.writableEnded) {
+      if (raw.writable) {
         writeEvent(raw, 'notification', payload);
       }
     });
@@ -87,7 +87,7 @@ export class NotificationSseController {
     // Heartbeat every 25s.
     // Keeps the TCP connection alive through proxies and load balancers.
     const heartbeat = setInterval(() => {
-      if (raw.writableEnded) {
+      if (!raw.writable) {
         clearInterval(heartbeat);
         return;
       }

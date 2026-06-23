@@ -34,15 +34,12 @@ export class NotificationPreferencesService {
    *   3. Default: true (enabled)
    */
   async isEnabled(userId: string, type: string, channel: NotificationChannel): Promise<boolean> {
-    const specific = await this.repo.findOne(userId, type);
-    if (specific) {
-      return channel === 'in_app' ? specific.inApp : specific.email;
-    }
+    const rows = await this.repo.findForCheck(userId, type);
+    const specific = rows.find((r) => r.type === type);
+    if (specific) return channel === 'in_app' ? specific.inApp : specific.email;
 
-    const wildcard = await this.repo.findOne(userId, '*');
-    if (wildcard) {
-      return channel === 'in_app' ? wildcard.inApp : wildcard.email;
-    }
+    const wildcard = rows.find((r) => r.type === '*');
+    if (wildcard) return channel === 'in_app' ? wildcard.inApp : wildcard.email;
 
     return true; // default: all channels enabled
   }

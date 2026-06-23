@@ -1,10 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectDrizzle, type DrizzleDB } from '@platform';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { notificationPreferences } from '../../../../../../db/schema';
 import type { INotificationPreferenceRepository } from '../../domain/ports/notification-preference.repository';
 import type { NotificationPreference, UpsertPreferenceInput } from '../../domain/notification-preference.types';
-import { NOTIFICATION_PREFERENCE_REPOSITORY } from '../../domain/ports/notification-preference.repository';
 
 @Injectable()
 export class NotificationPreferenceDrizzleRepository
@@ -27,6 +26,19 @@ export class NotificationPreferenceDrizzleRepository
       .where(and(eq(notificationPreferences.userId, userId), eq(notificationPreferences.type, type)))
       .limit(1);
     return row ? this.map(row) : null;
+  }
+
+  async findForCheck(userId: string, type: string): Promise<NotificationPreference[]> {
+    return this.db
+      .select()
+      .from(notificationPreferences)
+      .where(
+        and(
+          eq(notificationPreferences.userId, userId),
+          inArray(notificationPreferences.type, [type, '*']),
+        ),
+      )
+      .then((rows) => rows.map(this.map));
   }
 
   async upsert(input: UpsertPreferenceInput): Promise<NotificationPreference> {

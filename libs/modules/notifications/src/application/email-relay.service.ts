@@ -11,7 +11,7 @@
  */
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { and, asc, eq, lt } from 'drizzle-orm';
+import { and, asc, eq, lt, lte } from 'drizzle-orm';
 import { InjectDrizzle } from '@platform';
 import type { DrizzleDB, DrizzleTx } from '@platform';
 import { AbstractOutboxRelay } from '@platform';
@@ -76,7 +76,7 @@ export class EmailRelayService
         idempotencyKey: emailOutbox.idempotencyKey,
       })
       .from(emailOutbox)
-      .where(and(eq(emailOutbox.status, 'pending'), lt(emailOutbox.attempts, this.maxAttempts)))
+      .where(and(eq(emailOutbox.status, 'pending'), lt(emailOutbox.attempts, this.maxAttempts), lte(emailOutbox.scheduledAt, new Date())))
       .orderBy(asc(emailOutbox.scheduledAt))
       .limit(this.batchSize)
       .for('update', { skipLocked: true });
