@@ -11,6 +11,8 @@ import { AppConfigService } from '../config/app-config.service';
 export interface JwtPayload {
   /** Subject = employeeId */
   sub: string;
+  /** Session ID — ties the access token to the refresh_tokens row for server-side revocation. */
+  sessionId: string;
   email: string;
   name: string;
   roles: string[];

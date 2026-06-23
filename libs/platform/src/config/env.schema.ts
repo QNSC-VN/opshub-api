@@ -30,7 +30,10 @@ export const EnvSchema = z.object({
   ENTRA_CLIENT_ID: z.string().uuid().optional(),
   // Used to sign fastify-cookie (required for CSRF signed cookies).
   COOKIE_SECRET: z.string().min(32),
-  JWT_ACCESS_EXPIRY: z.string().default('8h'),
+  /** Short-lived access token — 15 min is enterprise standard (token theft window). */
+  JWT_ACCESS_EXPIRY: z.string().default('15m'),
+  /** Refresh token TTL in days — stored as HttpOnly cookie, hashed in DB, revocable. */
+  JWT_REFRESH_EXPIRY_DAYS: z.coerce.number().int().positive().default(7),
   JWT_ISSUER: z.string().default('opshub-api'),
   JWT_AUDIENCE: z.string().default('opshub-web'),
 

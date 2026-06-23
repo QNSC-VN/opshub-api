@@ -8,6 +8,20 @@
       "when": 1782203994551,
       "tag": "0000_icy_oracle",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782216615021,
+      "tag": "0001_add_refresh_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782217374323,
+      "tag": "0002_add_refresh_token_family_id",
+      "breakpoints": true
     }
   ]
 }

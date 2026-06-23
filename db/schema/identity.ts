@@ -1,7 +1,7 @@
 /**
  * identity schema — employees (single-tenant directory, synced from Entra ID).
  */
-import { pgSchema, uuid, varchar, jsonb, timestamp, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgSchema, uuid, varchar, jsonb, timestamp, index, uniqueIndex, boolean } from 'drizzle-orm/pg-core';
 import { employeeStatusEnum } from './enums';
 
 export const identitySchema = pgSchema('identity');
@@ -27,5 +27,36 @@ export const employees = identitySchema.table(
     emailIdx: uniqueIndex('uq_employee_email').on(t.email),
     entraIdx: uniqueIndex('uq_employee_entra_oid').on(t.entraOid),
     statusIdx: index('ix_employee_status').on(t.status),
+  }),
+);
+
+/**
+ * Server-side refresh token table.
+ * Raw tokens never leave the server — only the SHA-256 hash is stored.
+ * This allows instant revocation (logout, offboarding, security incident).
+ */
+export const refreshTokens = identitySchema.table(
+  'refresh_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    employeeId: uuid('employee_id').notNull(),
+    /** SHA-256(rawToken). Raw token lives only in the HttpOnly cookie — never stored. */
+    tokenHash: varchar('token_hash', { length: 64 }).notNull(),
+    /**
+     * Family ID groups all rotated tokens from the same login.
+     * If a revoked token is used (theft detection), the entire family is revoked.
+     * Copied from Rally's auth_sessions pattern.
+     */
+    familyId: uuid('family_id').notNull(),
+    /** True once the token has been rotated or explicitly revoked. */
+    revoked: boolean('revoked').notNull().default(false),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    hashIdx: uniqueIndex('uq_refresh_token_hash').on(t.tokenHash),
+    employeeIdx: index('ix_refresh_token_employee').on(t.employeeId),
+    familyIdx: index('ix_refresh_token_family').on(t.familyId),
+    expiryIdx: index('ix_refresh_token_expiry').on(t.expiresAt),
   }),
 );
