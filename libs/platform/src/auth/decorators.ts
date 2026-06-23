@@ -8,10 +8,22 @@ import {
 import { ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from './jwt.guard';
 import { RoleGuard } from './role.guard';
+import { PolicyGuard } from './policy.guard';
 import type { JwtPayload } from './jwt.strategy';
+import type { ResourceAttrs } from './authz.types';
 
 export const IS_PUBLIC_KEY = 'isPublic';
 export const ROLES_KEY = 'requiredRoles';
+export const PERMISSION_KEY = 'requiredPermission';
+
+/** Resolves the acted-upon resource's attributes from the request, for scoped checks. */
+export type ScopeResolver = (req: unknown) => ResourceAttrs | Promise<ResourceAttrs>;
+
+/** Metadata attached by @RequirePermission and read by the PolicyGuard. */
+export interface PermissionRequirement {
+  permission: string;
+  scopeFrom?: ScopeResolver;
+}
 
 /** Mark a route as unauthenticated (skip JwtAuthGuard). */
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
@@ -53,4 +65,16 @@ export const Auth = (...roles: string[]) =>
     UseGuards(JwtAuthGuard, RoleGuard),
     ApiBearerAuth('access-token'),
     ...(roles.length ? [RequireRoles(...roles)] : []),
+  );
+
+/**
+ * Require a fine-grained permission (resource.action), enforced by the
+ * PolicyGuard against the principal's cached effective permissions. Pass
+ * `scopeFrom` to additionally constrain by resource scope (team/dept/region/self).
+ */
+export const RequirePermission = (permission: string, scopeFrom?: ScopeResolver) =>
+  applyDecorators(
+    UseGuards(JwtAuthGuard, PolicyGuard),
+    SetMetadata(PERMISSION_KEY, { permission, scopeFrom } satisfies PermissionRequirement),
+    ApiBearerAuth('access-token'),
   );

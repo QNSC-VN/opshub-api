@@ -9,6 +9,9 @@ import { RequestContextService } from './context/request-context';
 import { JwtStrategy } from './auth/jwt.strategy';
 import { JwtAuthGuard } from './auth/jwt.guard';
 import { RoleGuard } from './auth/role.guard';
+import { ScopeEvaluator } from './auth/scope-evaluator';
+import { AuthzService } from './auth/authz.service';
+import { PolicyGuard } from './auth/policy.guard';
 import { OutboxService } from './outbox/outbox.service';
 import { HealthController } from './observability/health.controller';
 import { HttpLoggingInterceptor } from './http/http-logging.interceptor';
@@ -60,6 +63,9 @@ import { NotificationPubSubService } from './notifications/notification-pubsub.s
     JwtStrategy,
     JwtAuthGuard,
     RoleGuard,
+    ScopeEvaluator,
+    AuthzService,
+    PolicyGuard,
     OutboxService,
     HttpLoggingInterceptor,
     CacheService,
@@ -89,6 +95,9 @@ import { NotificationPubSubService } from './notifications/notification-pubsub.s
     RequestContextService,
     JwtAuthGuard,
     RoleGuard,
+    ScopeEvaluator,
+    AuthzService,
+    PolicyGuard,
     OutboxService,
     HttpLoggingInterceptor,
     CacheService,

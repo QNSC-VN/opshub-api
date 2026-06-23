@@ -16,6 +16,7 @@ import {
   SanitizationPipe,
 } from '@platform';
 import { IdentityModule } from '@modules/identity';
+import { AuthzModule } from '@modules/authz';
 import { AssetsModule } from '@modules/assets';
 import { AccessRequestsModule } from '@modules/access-requests';
 import { ComplianceModule } from '@modules/compliance';
@@ -60,6 +61,7 @@ import { NotificationsModule } from '@modules/notifications';
     AuditModule,
     NotificationsModule,
     IdentityModule,
+    AuthzModule,
     AssetsModule,
     AccessRequestsModule,
     ComplianceModule,

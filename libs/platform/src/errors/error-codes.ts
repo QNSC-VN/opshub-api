@@ -54,6 +54,13 @@ export const ErrorCodes = {
 
   // Audit
   AUDIT_LOG_NOT_FOUND: 'AUDIT_LOG_NOT_FOUND',
+
+  // Authorization (RBAC)
+  ROLE_NOT_FOUND: 'ROLE_NOT_FOUND',
+  ROLE_KEY_TAKEN: 'ROLE_KEY_TAKEN',
+  ROLE_IMMUTABLE: 'ROLE_IMMUTABLE',
+  ROLE_ASSIGNMENT_NOT_FOUND: 'ROLE_ASSIGNMENT_NOT_FOUND',
+  PERMISSION_NOT_FOUND: 'PERMISSION_NOT_FOUND',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

@@ -6,6 +6,9 @@ import { pgEnum } from 'drizzle-orm/pg-core';
 // ── Identity ─────────────────────────────────────────────────────────────────
 export const employeeStatusEnum = pgEnum('employee_status', ['active', 'on_leave', 'offboarded']);
 
+// ── Authorization (RBAC scopes) ──────────────────────────────────────────────
+export const scopeTypeEnum = pgEnum('scope_type', ['global', 'self', 'team', 'dept', 'region']);
+
 // ── Assets ───────────────────────────────────────────────────────────────────
 export const assetTypeEnum = pgEnum('asset_type', [
   'laptop',

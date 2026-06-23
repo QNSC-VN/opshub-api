@@ -56,6 +56,23 @@ export class CacheService implements OnModuleInit, OnModuleDestroy {
     return this.client?.get(key) ?? null;
   }
 
+  /** Set a JSON-serializable value with optional TTL (seconds). */
+  async setJson<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
+    await this.set(key, JSON.stringify(value), ttlSeconds);
+  }
+
+  /** Get and parse a JSON value. Returns null if missing, disabled, or corrupt. */
+  async getJson<T>(key: string): Promise<T | null> {
+    const raw = await this.get(key);
+    if (raw === null) return null;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      this.logger.warn(`Corrupt JSON in cache for key ${key} — ignoring`);
+      return null;
+    }
+  }
+
   /** Delete one or more keys. */
   async del(...keys: string[]): Promise<void> {
     if (!this.client || keys.length === 0) return;

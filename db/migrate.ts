@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   const db = drizzle(pool);
 
   // Ensure schemas exist before applying table migrations.
-  for (const schema of ['identity', 'assets', 'access', 'compliance', 'workforce', 'audit', 'messaging']) {
+  for (const schema of ['identity', 'authz', 'assets', 'access', 'compliance', 'workforce', 'audit', 'messaging']) {
     await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS ${schema}`));
   }
 
