@@ -77,12 +77,30 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opshub_test?sslmode=disable
 
+      - name: Generate ephemeral JWT keypair for tests
+        # Generates a fresh EC P-256 keypair per CI run — never reuse a static secret.
+        # Keys are exported as base64-encoded PEM to $GITHUB_ENV for use in test steps.
+        run: |
+          node - << 'EOF'
+          const { generateKeyPairSync } = require('crypto');
+          const fs = require('fs');
+          const { privateKey, publicKey } = generateKeyPairSync('ec', {
+            namedCurve: 'P-256',
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+            publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+          });
+          fs.appendFileSync(process.env.GITHUB_ENV, `CI_JWT_PRIVATE_KEY=${Buffer.from(privateKey).toString('base64')}\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `CI_JWT_PUBLIC_KEY=${Buffer.from(publicKey).toString('base64')}\n`);
+          console.log('JWT keypair generated');
+          EOF
+
       - name: Unit tests (with coverage)
         run: pnpm test:cov
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opshub_test?sslmode=disable
-          JWT_SECRET: ci-test-jwt-secret-minimum-32-characters-long-ok
+          JWT_PRIVATE_KEY: ${{ env.CI_JWT_PRIVATE_KEY }}
+          JWT_PUBLIC_KEY: ${{ env.CI_JWT_PUBLIC_KEY }}
           JWT_ACCESS_EXPIRY: 8h
           JWT_ISSUER: opshub-api
           JWT_AUDIENCE: opshub-web
@@ -96,7 +114,8 @@ jobs:
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opshub_test?sslmode=disable
-          JWT_SECRET: ci-test-jwt-secret-minimum-32-characters-long-ok
+          JWT_PRIVATE_KEY: ${{ env.CI_JWT_PRIVATE_KEY }}
+          JWT_PUBLIC_KEY: ${{ env.CI_JWT_PUBLIC_KEY }}
           JWT_ACCESS_EXPIRY: 8h
           JWT_ISSUER: opshub-api
           JWT_AUDIENCE: opshub-web
@@ -187,6 +206,20 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opshub_openapi?sslmode=disable
 
+      - name: Generate ephemeral JWT keypair
+        run: |
+          node - << 'EOF'
+          const { generateKeyPairSync } = require('crypto');
+          const fs = require('fs');
+          const { privateKey, publicKey } = generateKeyPairSync('ec', {
+            namedCurve: 'P-256',
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+            publicKeyEncoding:  { type: 'spki',  format: 'pem' },
+          });
+          fs.appendFileSync(process.env.GITHUB_ENV, `CI_JWT_PRIVATE_KEY=${Buffer.from(privateKey).toString('base64')}\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `CI_JWT_PUBLIC_KEY=${Buffer.from(publicKey).toString('base64')}\n`);
+          EOF
+
       - name: Build api
         run: pnpm build:api
 
@@ -203,7 +236,8 @@ jobs:
           kill "$API_PID" || true
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opshub_openapi?sslmode=disable
-          JWT_SECRET: ci-openapi-secret-minimum-32-characters-long-ok
+          JWT_PRIVATE_KEY: ${{ env.CI_JWT_PRIVATE_KEY }}
+          JWT_PUBLIC_KEY: ${{ env.CI_JWT_PUBLIC_KEY }}
           JWT_ACCESS_EXPIRY: 8h
           JWT_ISSUER: opshub-api
           JWT_AUDIENCE: opshub-web

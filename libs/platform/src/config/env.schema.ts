@@ -23,7 +23,19 @@ export const EnvSchema = z.object({
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   // Scaffold: HS256 + dev-login. Production: Entra ID OIDC (MSAL → entra-login).
-  JWT_SECRET: z.string().min(32),
+  // JWT — ES256 asymmetric signing (Ed25519-class security, forward-secrecy capable)
+  // Keys must be PEM-encoded EC P-256 keypair. Accepted as raw PEM or base64-encoded PEM.
+  // Generate: openssl ecparam -name prime256v1 -genkey -noout | openssl pkcs8 -topk8 -nocrypt
+  JWT_PRIVATE_KEY: z
+    .string()
+    .min(1)
+    .transform((v) => (v.includes('-----BEGIN') ? v : Buffer.from(v, 'base64').toString('utf8')))
+    .refine((v) => v.includes('-----BEGIN'), 'JWT_PRIVATE_KEY must be a PEM-encoded private key'),
+  JWT_PUBLIC_KEY: z
+    .string()
+    .min(1)
+    .transform((v) => (v.includes('-----BEGIN') ? v : Buffer.from(v, 'base64').toString('utf8')))
+    .refine((v) => v.includes('-----BEGIN'), 'JWT_PUBLIC_KEY must be a PEM-encoded public key'),
 
   // Entra ID SSO — required in production, optional in dev (enables entra-login endpoint).
   ENTRA_TENANT_ID: z.string().uuid().optional(),

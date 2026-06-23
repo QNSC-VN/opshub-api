@@ -29,11 +29,17 @@ import { ResilienceService } from './resilience/resilience.service';
     JwtModule.registerAsync({
       inject: [AppConfigService],
       useFactory: (config: AppConfigService) => ({
-        secret: config.get('JWT_SECRET'),
+        privateKey: config.get('JWT_PRIVATE_KEY'),
+        publicKey: config.get('JWT_PUBLIC_KEY'),
         signOptions: {
-          algorithm: 'HS256',
+          algorithm: 'ES256',
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           expiresIn: config.get('JWT_ACCESS_EXPIRY') as any,
+          issuer: config.get('JWT_ISSUER'),
+          audience: config.get('JWT_AUDIENCE'),
+        },
+        verifyOptions: {
+          algorithms: ['ES256'],
           issuer: config.get('JWT_ISSUER'),
           audience: config.get('JWT_AUDIENCE'),
         },
