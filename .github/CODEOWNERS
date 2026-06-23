@@ -1,0 +1,16 @@
+# Default reviewers for all files
+*                                   @nghiavan0610
+
+# Authentication + security — must have security review before merge
+libs/platform/src/auth/             @nghiavan0610
+libs/modules/identity/              @nghiavan0610
+
+# Database migrations — DDL changes need lead review
+db/migrations/                      @nghiavan0610
+
+# CI/CD and infra-adjacent workflows
+.github/workflows/                  @nghiavan0610
+
+# Shared platform config (env schema, global modules, error codes)
+libs/platform/                      @nghiavan0610
+libs/shared-kernel/                 @nghiavan0610

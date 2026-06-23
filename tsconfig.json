@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2022",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "incremental": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "types": ["node"],
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@shared-kernel": ["./libs/shared-kernel/src/index"],
+      "@shared-kernel/*": ["./libs/shared-kernel/src/*"],
+      "@platform": ["./libs/platform/src/index"],
+      "@platform/*": ["./libs/platform/src/*"],
+      "@contracts": ["./libs/contracts/src/index"],
+      "@contracts/*": ["./libs/contracts/src/*"],
+      "@modules/identity": ["./libs/modules/identity/src/index"],
+      "@modules/identity/*": ["./libs/modules/identity/src/*"],
+      "@modules/assets": ["./libs/modules/assets/src/index"],
+      "@modules/assets/*": ["./libs/modules/assets/src/*"],
+      "@modules/access-requests": ["./libs/modules/access-requests/src/index"],
+      "@modules/access-requests/*": ["./libs/modules/access-requests/src/*"],
+      "@modules/compliance": ["./libs/modules/compliance/src/index"],
+      "@modules/compliance/*": ["./libs/modules/compliance/src/*"],
+      "@modules/workforce": ["./libs/modules/workforce/src/index"],
+      "@modules/workforce/*": ["./libs/modules/workforce/src/*"],
+      "@modules/audit": ["./libs/modules/audit/src/index"],
+      "@modules/audit/*": ["./libs/modules/audit/src/*"]
+    }
+  }
+}

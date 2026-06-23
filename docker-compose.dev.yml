@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: opshub
+      POSTGRES_PASSWORD: opshub
+      POSTGRES_DB: opshub
+    ports:
+      - '5432:5432'
+    volumes:
+      - opshub_pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U opshub']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  opshub_pgdata:

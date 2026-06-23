@@ -1,0 +1,66 @@
+version: 2
+
+updates:
+  # ── npm / pnpm dependencies ─────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Ho_Chi_Minh
+    open-pull-requests-limit: 10
+    groups:
+      patch-updates:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    allow:
+      - dependency-type: all
+    labels:
+      - "deps"
+      - "automated"
+    commit-message:
+      prefix: "deps"
+      include: scope
+    reviewers:
+      - nghiavan0610
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # ── GitHub Actions ──────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Ho_Chi_Minh
+    open-pull-requests-limit: 5
+    groups:
+      actions-updates:
+        patterns: ["*"]
+    labels:
+      - "ci"
+      - "automated"
+    commit-message:
+      prefix: "ci(deps)"
+    reviewers:
+      - nghiavan0610
+
+  # ── Docker base images ──────────────────────────────────────────────────────
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Ho_Chi_Minh
+    labels:
+      - "deps"
+      - "docker"
+      - "automated"
+    commit-message:
+      prefix: "chore(docker)"
+    reviewers:
+      - nghiavan0610

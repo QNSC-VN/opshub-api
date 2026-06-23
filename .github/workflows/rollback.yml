@@ -1,0 +1,109 @@
+# =============================================================================
+# Rollback — revert ECS services to a known-good image tag
+#
+# Use during incidents when the latest deploy introduced a regression.
+# Requires the target image tag to already exist in ECR.
+# =============================================================================
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to roll back
+        required: true
+        type: choice
+        options:
+          - develop
+          - production
+      image_tag:
+        description: >
+          Image tag to roll back to — e.g. sha-abc1234 or v1.2.3.
+          Find previous tags in ECR or the deploy workflow run history.
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com
+
+jobs:
+  rollback:
+    name: Rollback ${{ inputs.environment }} → ${{ inputs.image_tag }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 45
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      IMAGE_TAG:   ${{ inputs.image_tag }}
+      ENVIRONMENT: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: nghiavan0610/qncs-gitops/actions/setup-aws-oidc@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+        with:
+          role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Rollback API service
+        run: |
+          TASK_DEF=$(aws ecs describe-services \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --services "${{ vars.ECS_API_SERVICE }}" \
+            --query 'services[0].taskDefinition' --output text)
+
+          NEW_IMAGE="${{ env.ECR_REGISTRY }}/opshub-api:${{ env.IMAGE_TAG }}"
+          NEW_TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition "$TASK_DEF" \
+            --query 'taskDefinition' | \
+            jq --arg img "$NEW_IMAGE" '
+              .containerDefinitions[0].image = $img |
+              del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
+            ')
+          NEW_TD_ARN=$(echo "$NEW_TASK_DEF" | aws ecs register-task-definition \
+            --cli-input-json /dev/stdin \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --service "${{ vars.ECS_API_SERVICE }}" \
+            --task-definition "$NEW_TD_ARN"
+
+      - name: Rollback Worker service
+        run: |
+          TASK_DEF=$(aws ecs describe-services \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --services "${{ vars.ECS_WORKER_SERVICE }}" \
+            --query 'services[0].taskDefinition' --output text)
+
+          NEW_IMAGE="${{ env.ECR_REGISTRY }}/opshub-worker:${{ env.IMAGE_TAG }}"
+          NEW_TASK_DEF=$(aws ecs describe-task-definition \
+            --task-definition "$TASK_DEF" \
+            --query 'taskDefinition' | \
+            jq --arg img "$NEW_IMAGE" '
+              .containerDefinitions[0].image = $img |
+              del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)
+            ')
+          NEW_TD_ARN=$(echo "$NEW_TASK_DEF" | aws ecs register-task-definition \
+            --cli-input-json /dev/stdin \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --service "${{ vars.ECS_WORKER_SERVICE }}" \
+            --task-definition "$NEW_TD_ARN"
+
+      - name: Wait for services to stabilise
+        uses: nghiavan0610/qncs-gitops/actions/verify-ecs-deploy@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+        with:
+          cluster: ${{ vars.ECS_CLUSTER }}
+          services: "${{ vars.ECS_API_SERVICE }},${{ vars.ECS_WORKER_SERVICE }}"
