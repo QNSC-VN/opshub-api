@@ -42,14 +42,17 @@ export async function bootstrapApp(app: NestFastifyApplication): Promise<void> {
   app.setGlobalPrefix('v1', { exclude: ['healthz', 'readyz'] });
   app.enableShutdownHooks();
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('OpsHub API')
-    .setDescription('Internal operations platform — assets, access, compliance, workforce.')
-    .setVersion(config.get('SERVICE_VERSION'))
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document, {
-    jsonDocumentUrl: 'api/docs-json',
-  });
+  // Expose OpenAPI only outside production — avoids leaking endpoint inventory
+  if (!config.get('NODE_ENV').startsWith('prod')) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('OpsHub API')
+      .setDescription('Internal operations platform — assets, access, compliance, workforce.')
+      .setVersion(config.get('SERVICE_VERSION'))
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document, {
+      jsonDocumentUrl: 'api/docs-json',
+    });
+  }
 }

@@ -34,10 +34,10 @@ export class AuthController {
     this.#refreshMaxAge = config.get('JWT_REFRESH_EXPIRY_DAYS') * 24 * 60 * 60;
   }
 
-  /** Brute-force / credential-stuffing protection: 10 login attempts per IP per minute. */
+  /** Brute-force / credential-stuffing protection: 5 attempts per 15 min per IP. */
   @Post('entra-login')
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
   @HttpCode(200)
   @ApiOperation({
     summary: 'SSO login — validate Entra ID id_token, JIT-provision employee, mint internal JWT',
@@ -54,7 +54,7 @@ export class AuthController {
 
   @Post('dev-login')
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
   @HttpCode(200)
   @ApiOperation({ summary: 'Dev login — only available outside production (Entra OIDC is used in prod)' })
   @ApiCommonErrors(401, 403, 422)

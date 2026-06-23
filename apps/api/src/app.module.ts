@@ -2,6 +2,7 @@ import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { trace, isSpanContextValid } from '@opentelemetry/api';
 import { LoggerModule } from 'nestjs-pino';
 import { ZodValidationPipe } from 'nestjs-zod';
 import {
@@ -11,6 +12,7 @@ import {
   HttpLoggingInterceptor,
   AsyncLocalStorageMiddleware,
   RequestContextService,
+  SanitizationPipe,
 } from '@platform';
 import { IdentityModule } from '@modules/identity';
 import { AssetsModule } from '@modules/assets';
@@ -31,8 +33,21 @@ import { AuditModule } from '@modules/audit';
             ? { target: 'pino-pretty', options: { singleLine: true } }
             : undefined,
           mixin: () => {
+            const result: Record<string, unknown> = {};
+            // Trace-log correlation: link every log line to the active OTel span
+            const span = trace.getActiveSpan();
+            if (span) {
+              const spanCtx = span.spanContext();
+              if (isSpanContextValid(spanCtx)) {
+                result['trace.id'] = spanCtx.traceId;
+                result['span.id'] = spanCtx.spanId;
+              }
+            }
             const correlationId = ctx.getCorrelationId();
-            return correlationId ? { correlationId } : {};
+            const userId = ctx.getUserId();
+            if (correlationId) result['correlationId'] = correlationId;
+            if (userId) result['userId'] = userId;
+            return result;
           },
           redact: ['req.headers.authorization', 'req.headers.cookie'],
         },
@@ -52,6 +67,7 @@ import { AuditModule } from '@modules/audit';
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_INTERCEPTOR, useClass: HttpLoggingInterceptor },
+    { provide: APP_PIPE, useClass: SanitizationPipe },  // strip XSS before validation
     { provide: APP_PIPE, useClass: ZodValidationPipe },
   ],
 })
