@@ -171,19 +171,23 @@ export class AuthService {
   }
 
   /** Revoke the session — also fast-revokes the matching access token via cache. */
-  async logout(rawToken: string): Promise<void> {
+  async logout(rawToken: string, accessTokenExp?: number): Promise<void> {
     const hash = this.#hash(rawToken);
     const stored = await this.refreshTokenRepo.findByHash(hash);
     if (!stored || stored.revoked) return;
 
     await this.refreshTokenRepo.revokeById(stored.id);
 
-    // Fast-revoke: block the corresponding access token until it naturally expires.
-    // Keyed on `jti` (= sessionId) per OWASP JWT Cheat Sheet §No Built-In Token Revocation.
+    // Fast-revoke: block the access token for exactly its remaining lifetime.
+    // Using payload.exp - now (exact TTL) means the cache entry never outlives the JWT.
+    const ttlSeconds = accessTokenExp
+      ? Math.max(1, accessTokenExp - Math.floor(Date.now() / 1000))
+      : AuthService.SESSION_REVOKE_TTL;
+
     await this.cache.set(
       `revoked:session:${stored.id}`,
       '1',
-      AuthService.SESSION_REVOKE_TTL,
+      ttlSeconds,
     );
 
     await this.audit.record({

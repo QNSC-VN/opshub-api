@@ -90,16 +90,19 @@ export class AuthController {
   }
 
   @Post('logout')
-  @Public()
+  @Auth()
   @HttpCode(204)
-  @ApiOperation({ summary: 'Revoke the current refresh token session and clear the cookie' })
+  @ApiOperation({ summary: 'Revoke the current session — invalidates both the refresh token and the active access token' })
   async logout(
+    @CurrentUser() user: JwtPayload,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
     const rawToken = request.cookies?.[REFRESH_COOKIE];
     if (rawToken) {
-      await this.authService.logout(rawToken);
+      // Pass access token exp so the revocation cache entry expires exactly when
+      // the JWT would have anyway — no over- or under-blocking.
+      await this.authService.logout(rawToken, user.exp);
     }
     reply.clearCookie(REFRESH_COOKIE, { path: '/v1/auth' });
   }

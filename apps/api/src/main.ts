@@ -13,7 +13,11 @@ import { bootstrapApp } from './bootstrap/app.bootstrap';
 async function main(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ trustProxy: true }),
+    new FastifyAdapter({
+      trustProxy: true,
+      // Explicit body limit — prevents zip-bomb / oversized payload attacks (OWASP A04)
+      bodyLimit: 10 * 1024 * 1024, // 10 MB; tighten per-route if needed
+    }),
     { bufferLogs: true },
   );
 
