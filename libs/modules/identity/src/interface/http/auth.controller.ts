@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { Auth, ApiCommonErrors, CurrentUser, Public, UnauthorizedException, PermissionDeniedException, ErrorCodes, AppConfigService } from '@platform';
 import type { JwtPayload } from '@platform';
 import type { FastifyRequest, FastifyReply } from 'fastify';
@@ -33,8 +34,10 @@ export class AuthController {
     this.#refreshMaxAge = config.get('JWT_REFRESH_EXPIRY_DAYS') * 24 * 60 * 60;
   }
 
+  /** Brute-force / credential-stuffing protection: 10 login attempts per IP per minute. */
   @Post('entra-login')
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(200)
   @ApiOperation({
     summary: 'SSO login — validate Entra ID id_token, JIT-provision employee, mint internal JWT',
@@ -51,6 +54,7 @@ export class AuthController {
 
   @Post('dev-login')
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @HttpCode(200)
   @ApiOperation({ summary: 'Dev login — only available outside production (Entra OIDC is used in prod)' })
   @ApiCommonErrors(401, 403, 422)
@@ -68,6 +72,7 @@ export class AuthController {
 
   @Post('refresh')
   @Public()
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @HttpCode(200)
   @ApiOperation({ summary: 'Silently refresh the access token using the HttpOnly refresh cookie' })
   @ApiCommonErrors(401)

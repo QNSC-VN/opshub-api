@@ -2,7 +2,8 @@ import { randomBytes, createHash, randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { UnauthorizedException, ErrorCodes, AppConfigService } from '@platform';
+import { UnauthorizedException, ErrorCodes, AppConfigService, CacheService } from '@platform';
+import { AuditService } from '@modules/audit';
 import {
   EMPLOYEE_REPOSITORY,
   type IEmployeeRepository,
@@ -26,19 +27,26 @@ export interface TokenResult {
 /**
  * Auth application service.
  *
- * Token strategy (enterprise / Rally-grade):
+ * Token strategy (enterprise-grade):
  *   - Access token:  15 min JWT, payload includes `sessionId` (= refresh_tokens.id).
  *                    Returned in JSON body. SPA stores in memory — never localStorage.
  *   - Refresh token: 7-day random token, delivered via HttpOnly Secure SameSite=Lax cookie only.
  *                    SHA-256 hash stored in DB. Rotated on every use.
- *   - Family ID:     Every login chain shares a `familyId`.  If a revoked token is
- *                    replayed, the entire family is revoked (theft detection).
+ *   - Family ID:     Every login chain shares a `familyId`. If a revoked token is replayed,
+ *                    the entire family is revoked (theft detection).
+ *   - Fast revocation: On logout or offboard, sessionId/employeeId is cached in Redis with a
+ *                    TTL matching the access token lifetime. JwtStrategy checks this on every request.
  */
 @Injectable()
 export class AuthService {
+  /** TTL for session revocation cache entries = access token lifetime (15 min). */
+  static readonly SESSION_REVOKE_TTL = 15 * 60; // seconds
+
   constructor(
     private readonly jwt: JwtService,
     private readonly config: AppConfigService,
+    private readonly cache: CacheService,
+    private readonly audit: AuditService,
     @Inject(EMPLOYEE_REPOSITORY) private readonly employeeRepo: IEmployeeRepository,
     @Inject(REFRESH_TOKEN_REPOSITORY) private readonly refreshTokenRepo: IRefreshTokenRepository,
   ) {}
@@ -49,7 +57,17 @@ export class AuthService {
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Unknown employee');
     }
     this.#assertActive(employee);
-    return this.#mintTokens(employee, randomUUID());
+    const result = await this.#mintTokens(employee, randomUUID());
+
+    await this.audit.record({
+      actorId: employee.id,
+      actorEmail: employee.email,
+      action: 'auth.login.dev',
+      resourceType: 'session',
+      metadata: { email: employee.email },
+    });
+
+    return result;
   }
 
   async entraLogin(idToken: string): Promise<TokenResult> {
@@ -96,13 +114,22 @@ export class AuthService {
     });
 
     this.#assertActive(employee);
-    return this.#mintTokens(employee, randomUUID());
+    const result = await this.#mintTokens(employee, randomUUID());
+
+    await this.audit.record({
+      actorId: employee.id,
+      actorEmail: employee.email,
+      action: 'auth.login.sso',
+      resourceType: 'session',
+      metadata: { email: employee.email, entraOid: oid },
+    });
+
+    return result;
   }
 
   /**
    * Rotate the refresh token.
    *
-   * - Looks up the stored session by hash.
    * - If the token is already revoked, the entire family is killed (theft detected).
    * - If the token is expired, throws 401.
    * - Otherwise: atomically revokes the old session and issues a new one in the same family.
@@ -116,8 +143,15 @@ export class AuthService {
     }
 
     if (stored.revoked) {
-      // Token reuse detected — revoke the entire family (possible theft)
+      // Token reuse detected — revoke the entire family
       await this.refreshTokenRepo.revokeFamily(stored.familyId);
+      await this.audit.record({
+        actorId: stored.employeeId,
+        action: 'auth.token_theft_detected',
+        resourceType: 'session',
+        resourceId: stored.familyId,
+        metadata: { familyId: stored.familyId },
+      });
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Refresh token reuse detected');
     }
 
@@ -125,7 +159,6 @@ export class AuthService {
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Refresh token expired');
     }
 
-    // Revoke the old session row immediately
     await this.refreshTokenRepo.revokeById(stored.id);
 
     const employee = await this.employeeRepo.findById(stored.employeeId);
@@ -134,17 +167,32 @@ export class AuthService {
     }
     this.#assertActive(employee);
 
-    // Issue a new pair in the same family chain
     return this.#mintTokens(employee, stored.familyId);
   }
 
-  /** Revoke the session tied to a raw refresh token (server-side logout). */
+  /** Revoke the session — also fast-revokes the matching access token via cache. */
   async logout(rawToken: string): Promise<void> {
     const hash = this.#hash(rawToken);
     const stored = await this.refreshTokenRepo.findByHash(hash);
-    if (stored && !stored.revoked) {
-      await this.refreshTokenRepo.revokeById(stored.id);
-    }
+    if (!stored || stored.revoked) return;
+
+    await this.refreshTokenRepo.revokeById(stored.id);
+
+    // Fast-revoke: block the corresponding access token until it naturally expires.
+    // Keyed on `jti` (= sessionId) per OWASP JWT Cheat Sheet §No Built-In Token Revocation.
+    await this.cache.set(
+      `revoked:session:${stored.id}`,
+      '1',
+      AuthService.SESSION_REVOKE_TTL,
+    );
+
+    await this.audit.record({
+      actorId: stored.employeeId,
+      action: 'auth.logout',
+      resourceType: 'session',
+      resourceId: stored.id,
+      metadata: { sessionId: stored.id },
+    });
   }
 
   // ─── Private helpers ───────────────────────────────────────────────────────
@@ -155,12 +203,6 @@ export class AuthService {
     }
   }
 
-  /**
-   * Core token issuance.
-   *
-   * @param employee  - The authenticated employee record.
-   * @param familyId  - `randomUUID()` for a fresh login; existing `familyId` for rotation.
-   */
   async #mintTokens(employee: Employee, familyId: string): Promise<TokenResult> {
     const sessionId = randomUUID();
     const rawRefreshToken = randomBytes(32).toString('base64url');
@@ -177,14 +219,15 @@ export class AuthService {
     });
 
     const accessToken = await this.jwt.signAsync({
+      // RFC 7519 standard claim — OWASP-recommended revocation key (jti + iss pair)
+      jti: sessionId,
       sub: employee.id,
-      sessionId,
       email: employee.email,
       name: employee.displayName,
       roles: employee.roles,
     });
 
-    const expiresIn = 15 * 60; // 900 s — matches JWT_ACCESS_EXPIRY=15m
+    const expiresIn = AuthService.SESSION_REVOKE_TTL; // 900s — matches JWT_ACCESS_EXPIRY=15m
 
     return { accessToken, expiresIn, rawRefreshToken };
   }

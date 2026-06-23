@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, lt, sql } from 'drizzle-orm';
 import { InjectDrizzle, type DrizzleDB } from '@platform';
 import { auditLogs } from '../../../../../../db/schema';
 import type { IAuditRepository } from '../../domain/ports/audit.repository';
@@ -49,5 +49,13 @@ export class AuditDrizzleRepository implements IAuditRepository {
       .where(where);
 
     return { rows: rows as AuditLog[], total: count };
+  }
+
+  async deleteOlderThan(before: Date): Promise<number> {
+    const result = await this.db
+      .delete(auditLogs)
+      .where(lt(auditLogs.occurredAt, before))
+      .returning({ id: auditLogs.id });
+    return result.length;
   }
 }

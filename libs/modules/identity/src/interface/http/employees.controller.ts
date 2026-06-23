@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult } from '@platform';
-import type { PagedResult } from '@platform';
+import { Auth, ApiCommonErrors, ApiPagedResponse, CurrentUser, buildPageResult } from '@platform';
+import type { JwtPayload, PagedResult } from '@platform';
 import { EmployeeService } from '../../application/employee.service';
 import {
   CreateEmployeeDto,
@@ -57,23 +57,34 @@ export class EmployeesController {
   @Auth('it-admin', 'hr')
   @ApiOperation({ summary: 'Create an employee record' })
   @ApiCommonErrors(401, 403, 409, 422)
-  async create(@Body() dto: CreateEmployeeDto): Promise<EmployeeResponseDto> {
-    return toDto(await this.employeeService.create(dto));
+  async create(
+    @Body() dto: CreateEmployeeDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<EmployeeResponseDto> {
+    return toDto(await this.employeeService.create(dto, { sub: user.sub, email: user.email }));
   }
 
   @Patch(':id')
   @Auth('it-admin', 'hr')
   @ApiOperation({ summary: 'Update employee profile fields (display name, department, job title, roles)' })
   @ApiCommonErrors(401, 403, 404, 422)
-  async update(@Param('id') id: string, @Body() dto: UpdateEmployeeDto): Promise<EmployeeResponseDto> {
-    return toDto(await this.employeeService.update(id, dto));
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateEmployeeDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<EmployeeResponseDto> {
+    return toDto(await this.employeeService.update(id, dto, { sub: user.sub, email: user.email }));
   }
 
   @Patch(':id/status')
   @Auth('it-admin', 'hr')
   @ApiOperation({ summary: 'Change employee status — offboarding immediately revokes all active sessions' })
   @ApiCommonErrors(401, 403, 404, 422)
-  async updateStatus(@Param('id') id: string, @Body() dto: UpdateStatusDto): Promise<EmployeeResponseDto> {
-    return toDto(await this.employeeService.updateStatus(id, dto.status as EmployeeStatus));
+  async updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateStatusDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<EmployeeResponseDto> {
+    return toDto(await this.employeeService.updateStatus(id, dto.status as EmployeeStatus, { sub: user.sub, email: user.email }));
   }
 }
