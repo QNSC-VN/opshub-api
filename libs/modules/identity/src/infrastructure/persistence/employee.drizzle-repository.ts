@@ -4,7 +4,13 @@ import { InjectDrizzle, type DrizzleDB } from '@platform';
 import { newId } from '@shared-kernel';
 import { employees } from '../../../../../../db/schema';
 import type { IEmployeeRepository } from '../../domain/ports/employee.repository';
-import type { CreateEmployeeInput, Employee, EmployeeFilters } from '../../domain/employee.types';
+import type {
+  CreateEmployeeInput,
+  UpdateEmployeeInput,
+  Employee,
+  EmployeeFilters,
+  EmployeeStatus,
+} from '../../domain/employee.types';
 
 @Injectable()
 export class EmployeeDrizzleRepository implements IEmployeeRepository {
@@ -56,7 +62,6 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
   ): Promise<Employee> {
     const existing = await this.findByEntraOid(oid);
     if (existing) {
-      // Update display name and email in case they changed in Entra
       const [updated] = await this.db
         .update(employees)
         .set({ displayName: input.displayName, email: input.email.toLowerCase(), updatedAt: new Date() })
@@ -65,7 +70,6 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       return updated as Employee;
     }
 
-    // JIT-provision: check if an employee row exists by email (pre-created by IT admin)
     const byEmail = await this.findByEmail(input.email.toLowerCase());
     if (byEmail) {
       const [linked] = await this.db
@@ -76,8 +80,25 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       return linked as Employee;
     }
 
-    // Create a brand-new employee row (self-service first login)
     return this.create({ ...input, entraOid: oid, roles: [] });
+  }
+
+  async update(id: string, input: UpdateEmployeeInput): Promise<Employee> {
+    const [updated] = await this.db
+      .update(employees)
+      .set({ ...input, updatedAt: new Date() })
+      .where(eq(employees.id, id))
+      .returning();
+    return updated as Employee;
+  }
+
+  async updateStatus(id: string, status: EmployeeStatus): Promise<Employee> {
+    const [updated] = await this.db
+      .update(employees)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(employees.id, id))
+      .returning();
+    return updated as Employee;
   }
 
   async list(

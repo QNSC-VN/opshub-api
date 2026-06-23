@@ -26,6 +26,14 @@ export interface CreateEmployeeInput {
   entraOid?: string | null;
 }
 
+export interface UpdateEmployeeInput {
+  displayName?: string;
+  department?: string | null;
+  jobTitle?: string | null;
+  managerId?: string | null;
+  roles?: string[];
+}
+
 export interface EmployeeFilters {
   status?: EmployeeStatus;
   department?: string;

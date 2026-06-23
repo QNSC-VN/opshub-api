@@ -23,6 +23,20 @@ export const ListEmployeesQuerySchema = z.object({
 
 export class ListEmployeesQueryDto extends createZodDto(ListEmployeesQuerySchema) {}
 
+export const UpdateEmployeeSchema = z.object({
+  displayName: z.string().min(1).max(200).optional(),
+  department: z.string().max(120).nullable().optional(),
+  jobTitle: z.string().max(120).nullable().optional(),
+  managerId: z.string().uuid().nullable().optional(),
+  roles: z.array(z.string()).optional(),
+});
+export class UpdateEmployeeDto extends createZodDto(UpdateEmployeeSchema) {}
+
+export const UpdateStatusSchema = z.object({
+  status: z.enum(['active', 'on_leave', 'offboarded']),
+});
+export class UpdateStatusDto extends createZodDto(UpdateStatusSchema) {}
+
 export class EmployeeResponseDto {
   id!: string;
   email!: string;

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult } from '@platform';
 import type { PagedResult } from '@platform';
@@ -6,9 +6,11 @@ import { EmployeeService } from '../../application/employee.service';
 import {
   CreateEmployeeDto,
   ListEmployeesQueryDto,
+  UpdateEmployeeDto,
+  UpdateStatusDto,
   EmployeeResponseDto,
 } from './dto/employee.dto';
-import type { Employee } from '../../domain/employee.types';
+import type { Employee, EmployeeStatus } from '../../domain/employee.types';
 
 function toDto(e: Employee): EmployeeResponseDto {
   return {
@@ -57,5 +59,21 @@ export class EmployeesController {
   @ApiCommonErrors(401, 403, 409, 422)
   async create(@Body() dto: CreateEmployeeDto): Promise<EmployeeResponseDto> {
     return toDto(await this.employeeService.create(dto));
+  }
+
+  @Patch(':id')
+  @Auth('it-admin', 'hr')
+  @ApiOperation({ summary: 'Update employee profile fields (display name, department, job title, roles)' })
+  @ApiCommonErrors(401, 403, 404, 422)
+  async update(@Param('id') id: string, @Body() dto: UpdateEmployeeDto): Promise<EmployeeResponseDto> {
+    return toDto(await this.employeeService.update(id, dto));
+  }
+
+  @Patch(':id/status')
+  @Auth('it-admin', 'hr')
+  @ApiOperation({ summary: 'Change employee status — offboarding immediately revokes all active sessions' })
+  @ApiCommonErrors(401, 403, 404, 422)
+  async updateStatus(@Param('id') id: string, @Body() dto: UpdateStatusDto): Promise<EmployeeResponseDto> {
+    return toDto(await this.employeeService.updateStatus(id, dto.status as EmployeeStatus));
   }
 }
