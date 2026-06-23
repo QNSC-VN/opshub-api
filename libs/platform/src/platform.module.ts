@@ -14,6 +14,12 @@ import { HealthController } from './observability/health.controller';
 import { HttpLoggingInterceptor } from './http/http-logging.interceptor';
 import { CacheService } from './cache/cache.service';
 import { ResilienceService } from './resilience/resilience.service';
+import { EMAIL_PROVIDER } from './email/email.provider';
+import { DevEmailProvider } from './email/providers/dev.provider';
+import { ResendEmailProvider } from './email/providers/resend.provider';
+import { EmailService } from './email/email.service';
+import { EmailSchedulerService } from './email/email-scheduler.service';
+import { NotificationSchedulerService } from './notifications/notification-scheduler.service';
 
 /**
  * Platform module — cross-cutting infrastructure shared by every bounded context:
@@ -57,6 +63,22 @@ import { ResilienceService } from './resilience/resilience.service';
     HttpLoggingInterceptor,
     CacheService,
     ResilienceService,
+    {
+      provide: EMAIL_PROVIDER,
+      inject: [AppConfigService],
+      useFactory: (config: AppConfigService) => {
+        const provider = config.get('EMAIL_PROVIDER');
+        if (provider === 'resend') {
+          const apiKey = config.get('RESEND_API_KEY');
+          if (!apiKey) throw new Error('RESEND_API_KEY is required when EMAIL_PROVIDER=resend');
+          return new ResendEmailProvider(apiKey);
+        }
+        return new DevEmailProvider();
+      },
+    },
+    EmailService,
+    EmailSchedulerService,
+    NotificationSchedulerService,
   ],
   exports: [
     AppConfigModule,
@@ -69,6 +91,9 @@ import { ResilienceService } from './resilience/resilience.service';
     HttpLoggingInterceptor,
     CacheService,
     ResilienceService,
+    EmailService,
+    EmailSchedulerService,
+    NotificationSchedulerService,
   ],
 })
 export class PlatformModule {}

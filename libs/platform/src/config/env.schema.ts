@@ -66,6 +66,17 @@ export const EnvSchema = z.object({
   // ── Cache (Valkey / Redis — optional in dev) ───────────────────────────────
   REDIS_URL: z.string().optional(),
   REDIS_KEY_PREFIX: z.string().default('opshub:'),
+
+  // ── Email ──────────────────────────────────────────────────────────────────
+  EMAIL_PROVIDER: z.enum(['dev', 'resend']).default('dev'),
+  MAIL_FROM_NAME: z.string().default('OpsHub'),
+  MAIL_FROM_EMAIL: z.string().email().default('no-reply@opshub.app'),
+  MAIL_REPLY_TO: z.string().email().optional(),
+  RESEND_API_KEY: z.string().optional(),
+
+  // ── Frontend ───────────────────────────────────────────────────────────────
+  /** Public base URL used to build links inside notification emails. */
+  APP_URL: z.string().url().default('http://localhost:5173'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -10,3 +10,4 @@ export * from './compliance';
 export * from './workforce';
 export * from './audit';
 export * from './messaging';
+export * from './notifications';

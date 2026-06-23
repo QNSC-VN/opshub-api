@@ -6,9 +6,13 @@ import {
   NotFoundException,
   PreconditionFailedException,
   ErrorCodes,
+  NotificationSchedulerService,
+  EmailSchedulerService,
 } from '@platform';
 import { AuditService } from '@modules/audit';
 import { newId } from '@shared-kernel';
+import { eq } from 'drizzle-orm';
+import { employees } from '../../../../../db/schema';
 import {
   ACCESS_REQUEST_REPOSITORY,
   type IAccessRequestRepository,
@@ -27,6 +31,8 @@ export class AccessRequestService {
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly outbox: OutboxService,
     private readonly audit: AuditService,
+    private readonly notifScheduler: NotificationSchedulerService,
+    private readonly emailScheduler: EmailSchedulerService,
   ) {}
 
   async submit(
@@ -93,6 +99,37 @@ export class AccessRequestService {
         eventType: 'access_request.approved',
         payload: { requestId, grantId: grant.id, granteeId: grant.granteeId, target: grant.target },
       });
+
+      // Resolve requester name + email for notifications
+      const [requester] = await tx
+        .select({ email: employees.email, displayName: employees.displayName })
+        .from(employees)
+        .where(eq(employees.id, request.requesterId))
+        .limit(1);
+
+      if (requester) {
+        await this.notifScheduler.schedule(tx, {
+          type:            'access_request.approved',
+          vars:            { resourceName: request.target, approverName: actor.email },
+          recipientId:     request.requesterId,
+          actorId:         actor.sub,
+          resourceId:      requestId,
+          idempotencyKey:  `access_request.approved:${requestId}`,
+        });
+
+        await this.emailScheduler.schedule(
+          tx,
+          requester.email,
+          'access-request.approved',
+          {
+            requesterName: requester.displayName,
+            resourceName:  request.target,
+            approverName:  actor.email,
+            appUrl:        process.env['APP_URL'] ?? 'http://localhost:5173',
+          },
+          { idempotencyKey: `email:access_request.approved:${requestId}` },
+        );
+      }
     });
 
     await this.audit.record({
@@ -127,6 +164,41 @@ export class AccessRequestService {
       resourceType: 'access_request',
       resourceId: requestId,
     });
+
+    // Schedule notification + email for the requester
+    await this.db.transaction(async (tx) => {
+      const [requester] = await tx
+        .select({ email: employees.email, displayName: employees.displayName })
+        .from(employees)
+        .where(eq(employees.id, request.requesterId))
+        .limit(1);
+
+      if (requester) {
+        await this.notifScheduler.schedule(tx, {
+          type:            'access_request.denied',
+          vars:            { resourceName: request.target, approverName: actor.email, reason: note ?? undefined },
+          recipientId:     request.requesterId,
+          actorId:         actor.sub,
+          resourceId:      requestId,
+          idempotencyKey:  `access_request.denied:${requestId}`,
+        });
+
+        await this.emailScheduler.schedule(
+          tx,
+          requester.email,
+          'access-request.denied',
+          {
+            requesterName: requester.displayName,
+            resourceName:  request.target,
+            approverName:  actor.email,
+            reason:        note ?? undefined,
+            appUrl:        process.env['APP_URL'] ?? 'http://localhost:5173',
+          },
+          { idempotencyKey: `email:access_request.denied:${requestId}` },
+        );
+      }
+    });
+
     return this.getById(requestId);
   }
 

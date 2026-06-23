@@ -21,6 +21,7 @@ import { AccessRequestsModule } from '@modules/access-requests';
 import { ComplianceModule } from '@modules/compliance';
 import { WorkforceModule } from '@modules/workforce';
 import { AuditModule } from '@modules/audit';
+import { NotificationsModule } from '@modules/notifications';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { AuditModule } from '@modules/audit';
     ScheduleModule.forRoot(),
     PlatformModule,
     AuditModule,
+    NotificationsModule,
     IdentityModule,
     AssetsModule,
     AccessRequestsModule,
