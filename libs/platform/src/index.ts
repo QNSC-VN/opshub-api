@@ -12,3 +12,4 @@ export * from './resilience/index';
 export * from './rate-limit/index';
 export * from './email/index';
 export * from './notifications/index';
+export * from './requests/index';

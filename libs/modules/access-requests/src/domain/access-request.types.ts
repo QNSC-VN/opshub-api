@@ -19,6 +19,8 @@ export interface AccessRequest {
   reviewedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  /** Link to the universal request engine (null for legacy rows). */
+  requestId: string | null;
 }
 
 export interface AccessGrant {
@@ -38,6 +40,8 @@ export interface CreateAccessRequestInput {
   target: string;
   justification: string;
   durationHours: number;
+  /** Engine request_items id — set after engine.submit(); null for legacy inserts. */
+  requestId?: string | null;
 }
 
 export interface AccessRequestFilters {

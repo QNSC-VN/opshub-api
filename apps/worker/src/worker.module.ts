@@ -4,6 +4,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { PlatformModule, AppConfigService } from '@platform';
 import { OutboxRelayService } from './outbox/outbox-relay.service';
 import { ComplianceSyncCron } from './cron/compliance-sync.cron';
+import { RequestExpiryCron } from './cron/request-expiry.cron';
 
 @Module({
   imports: [
@@ -21,6 +22,6 @@ import { ComplianceSyncCron } from './cron/compliance-sync.cron';
     ScheduleModule.forRoot(),
     PlatformModule,
   ],
-  providers: [OutboxRelayService, ComplianceSyncCron],
+  providers: [OutboxRelayService, ComplianceSyncCron, RequestExpiryCron],
 })
 export class WorkerModule {}

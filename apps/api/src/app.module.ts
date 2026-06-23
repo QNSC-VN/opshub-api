@@ -23,6 +23,7 @@ import { ComplianceModule } from '@modules/compliance';
 import { WorkforceModule } from '@modules/workforce';
 import { AuditModule } from '@modules/audit';
 import { NotificationsModule } from '@modules/notifications';
+import { RequestsModule } from '@modules/requests';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { NotificationsModule } from '@modules/notifications';
     AccessRequestsModule,
     ComplianceModule,
     WorkforceModule,
+    RequestsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },

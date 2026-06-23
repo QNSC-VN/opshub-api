@@ -50,6 +50,8 @@ export interface LeaveRequest {
   reviewerId: string | null;
   reviewedAt: Date | null;
   createdAt: Date;
+  /** Link to the universal request engine (null for legacy rows). */
+  requestId: string | null;
 }
 
 export interface CreateLeaveInput {
@@ -58,6 +60,7 @@ export interface CreateLeaveInput {
   startDate: string;
   endDate: string;
   reason?: string | null;
+  requestId?: string | null;
 }
 
 export interface LeaveFilters {
@@ -76,6 +79,8 @@ export interface OvertimeEntry {
   reviewerId: string | null;
   reviewedAt: Date | null;
   createdAt: Date;
+  /** Link to the universal request engine (null for legacy rows). */
+  requestId: string | null;
 }
 
 export interface CreateOvertimeInput {
@@ -83,6 +88,7 @@ export interface CreateOvertimeInput {
   workDate: string;
   hours: number;
   reason: string;
+  requestId?: string | null;
 }
 
 export interface OvertimeFilters {

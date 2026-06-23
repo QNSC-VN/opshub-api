@@ -4,6 +4,7 @@ import {
   NotFoundException,
   PreconditionFailedException,
   ErrorCodes,
+  RequestEngine,
 } from '@platform';
 import { AuditService } from '@modules/audit';
 import {
@@ -24,6 +25,8 @@ import type {
   Timesheet,
   TimesheetFilters,
 } from '../domain/workforce.types';
+import type { LeaveRequestPayload } from './leave-request.type-def';
+import type { OvertimePayload } from './overtime.type-def';
 
 type Actor = { sub: string; email: string };
 
@@ -32,6 +35,7 @@ export class WorkforceService {
   constructor(
     @Inject(WORKFORCE_REPOSITORY) private readonly repo: IWorkforceRepository,
     private readonly audit: AuditService,
+    private readonly engine: RequestEngine,
   ) {}
 
   // ── Timesheets ─────────────────────────────────────────────────────────────
@@ -110,16 +114,33 @@ export class WorkforceService {
         'You already have a leave request overlapping these dates',
       );
     }
+
+    // Create domain row first, then submit to engine
     const leave = await this.repo.createLeave({ ...input, employeeId: actor.sub });
+
+    const enginePayload: LeaveRequestPayload = {
+      leaveRequestId: leave.id,
+      employeeId: actor.sub,
+      leaveType: leave.leaveType,
+      startDate: leave.startDate,
+      endDate: leave.endDate,
+      reason: leave.reason,
+    };
+    const engineItem = await this.engine.submit('leave_request', enginePayload, actor, {
+      expiresAt: new Date(Date.now() + 72 * 3_600_000),
+    });
+
+    await this.repo.setLeaveRequestId(leave.id, engineItem.id);
+
     await this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
       action: 'leave.requested',
       resourceType: 'leave_request',
       resourceId: leave.id,
-      metadata: { leaveType: leave.leaveType, startDate: leave.startDate, endDate: leave.endDate },
+      metadata: { leaveType: leave.leaveType, startDate: leave.startDate, endDate: leave.endDate, engineRequestId: engineItem.id },
     });
-    return leave;
+    return { ...leave, requestId: engineItem.id };
   }
 
   async getLeave(id: string): Promise<LeaveRequest> {
@@ -144,19 +165,27 @@ export class WorkforceService {
         'Only pending leave requests can be reviewed',
       );
     }
-    const updated = await this.repo.setLeaveStatus(
-      id,
-      approve ? 'approved' : 'rejected',
-      actor.sub,
-    );
-    await this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: approve ? 'leave.approved' : 'leave.rejected',
-      resourceType: 'leave_request',
-      resourceId: id,
-    });
-    return updated!;
+
+    if (l.requestId) {
+      if (approve) {
+        await this.engine.approve(l.requestId, null, actor);
+      } else {
+        await this.engine.reject(l.requestId, null, actor);
+      }
+    } else {
+      // Legacy path
+      const updated = await this.repo.setLeaveStatus(id, approve ? 'approved' : 'rejected', actor.sub);
+      await this.audit.record({
+        actorId: actor.sub,
+        actorEmail: actor.email,
+        action: approve ? 'leave.approved' : 'leave.rejected',
+        resourceType: 'leave_request',
+        resourceId: id,
+      });
+      return updated!;
+    }
+
+    return this.getLeave(id);
   }
 
   async cancelLeave(id: string, actor: Actor): Promise<LeaveRequest> {
@@ -176,7 +205,22 @@ export class WorkforceService {
     input: Omit<CreateOvertimeInput, 'employeeId'>,
     actor: Actor,
   ): Promise<OvertimeEntry> {
-    return this.repo.createOvertime({ ...input, employeeId: actor.sub });
+    const entry = await this.repo.createOvertime({ ...input, employeeId: actor.sub });
+
+    const enginePayload: OvertimePayload = {
+      overtimeId: entry.id,
+      employeeId: actor.sub,
+      workDate: entry.workDate,
+      hours: input.hours,
+      reason: entry.reason,
+    };
+    const engineItem = await this.engine.submit('overtime', enginePayload, actor, {
+      expiresAt: new Date(Date.now() + 72 * 3_600_000),
+    });
+
+    await this.repo.setOvertimeRequestId(entry.id, engineItem.id);
+
+    return { ...entry, requestId: engineItem.id };
   }
 
   async getOvertime(id: string): Promise<OvertimeEntry> {
@@ -201,19 +245,27 @@ export class WorkforceService {
         'Only pending overtime entries can be reviewed',
       );
     }
-    const updated = await this.repo.setOvertimeStatus(
-      id,
-      approve ? 'approved' : 'rejected',
-      actor.sub,
-    );
-    await this.audit.record({
-      actorId: actor.sub,
-      actorEmail: actor.email,
-      action: approve ? 'overtime.approved' : 'overtime.rejected',
-      resourceType: 'overtime_entry',
-      resourceId: id,
-    });
-    return updated!;
+
+    if (o.requestId) {
+      if (approve) {
+        await this.engine.approve(o.requestId, null, actor);
+      } else {
+        await this.engine.reject(o.requestId, null, actor);
+      }
+    } else {
+      // Legacy path
+      const updated = await this.repo.setOvertimeStatus(id, approve ? 'approved' : 'rejected', actor.sub);
+      await this.audit.record({
+        actorId: actor.sub,
+        actorEmail: actor.email,
+        action: approve ? 'overtime.approved' : 'overtime.rejected',
+        resourceType: 'overtime_entry',
+        resourceId: id,
+      });
+      return updated!;
+    }
+
+    return this.getOvertime(id);
   }
 
   // ── Shift logs ─────────────────────────────────────────────────────────────

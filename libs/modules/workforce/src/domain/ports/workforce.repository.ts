@@ -46,6 +46,8 @@ export interface IWorkforceRepository {
     status: LeaveStatus,
     reviewerId: string | null,
   ): Promise<LeaveRequest | null>;
+  /** Backlink the engine request_items id into the domain row. */
+  setLeaveRequestId(id: string, requestId: string): Promise<void>;
   hasOverlappingLeave(
     employeeId: string,
     startDate: string,
@@ -65,6 +67,8 @@ export interface IWorkforceRepository {
     status: OvertimeStatus,
     reviewerId: string | null,
   ): Promise<OvertimeEntry | null>;
+  /** Backlink the engine request_items id into the domain row. */
+  setOvertimeRequestId(id: string, requestId: string): Promise<void>;
 
   // Shift logs
   createShiftLog(input: CreateShiftLogInput): Promise<ShiftLog>;

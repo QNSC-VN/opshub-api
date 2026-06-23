@@ -3,6 +3,7 @@
  */
 import { pgSchema, uuid, varchar, text, timestamp, index } from 'drizzle-orm/pg-core';
 import { accessRequestStatusEnum, accessTypeEnum } from './enums';
+import { requestItems } from './requests';
 
 export const accessSchema = pgSchema('access');
 
@@ -23,6 +24,8 @@ export const accessRequests = accessSchema.table(
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    /** Link to the universal request engine row (null for requests pre-dating the engine). */
+    requestId: uuid('request_id').references(() => requestItems.id, { onDelete: 'set null' }),
   },
   (t) => ({
     requesterIdx: index('ix_access_request_requester').on(t.requesterId),

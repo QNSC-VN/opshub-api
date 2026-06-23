@@ -9,6 +9,17 @@ export const employeeStatusEnum = pgEnum('employee_status', ['active', 'on_leave
 // ── Authorization (RBAC scopes) ──────────────────────────────────────────────
 export const scopeTypeEnum = pgEnum('scope_type', ['global', 'self', 'team', 'dept', 'region']);
 
+// ── Universal Request Engine ─────────────────────────────────────────────────
+export const requestStatusEnum = pgEnum('request_status', [
+  'pending',
+  'in_review',
+  'approved',
+  'rejected',
+  'cancelled',
+  'expired',
+]);
+export const requestPriorityEnum = pgEnum('request_priority', ['low', 'normal', 'high', 'urgent']);
+
 // ── Assets ───────────────────────────────────────────────────────────────────
 export const assetTypeEnum = pgEnum('asset_type', [
   'laptop',

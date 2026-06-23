@@ -25,6 +25,7 @@ export class AccessRequestDrizzleRepository implements IAccessRequestRepository 
         target: input.target,
         justification: input.justification,
         durationHours: String(input.durationHours),
+        requestId: input.requestId ?? null,
       })
       .returning();
     return row as AccessRequest;

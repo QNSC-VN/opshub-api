@@ -19,6 +19,7 @@ import {
   overtimeStatusEnum,
   shiftTypeEnum,
 } from './enums';
+import { requestItems } from './requests';
 
 export const workforceSchema = pgSchema('workforce');
 
@@ -56,6 +57,7 @@ export const leaveRequests = workforceSchema.table(
     reviewerId: uuid('reviewer_id'),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    requestId: uuid('request_id').references(() => requestItems.id, { onDelete: 'set null' }),
   },
   (t) => ({
     employeeIdx: index('ix_leave_employee').on(t.employeeId, t.startDate),
@@ -75,6 +77,7 @@ export const overtimeEntries = workforceSchema.table(
     reviewerId: uuid('reviewer_id'),
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    requestId: uuid('request_id').references(() => requestItems.id, { onDelete: 'set null' }),
   },
   (t) => ({
     employeeIdx: index('ix_overtime_employee').on(t.employeeId, t.workDate),

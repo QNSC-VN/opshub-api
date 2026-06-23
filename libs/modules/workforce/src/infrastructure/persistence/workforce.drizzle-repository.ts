@@ -105,6 +105,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
         startDate: input.startDate,
         endDate: input.endDate,
         reason: input.reason ?? null,
+        requestId: input.requestId ?? null,
       })
       .returning();
     return row as LeaveRequest;
@@ -162,6 +163,13 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
     return (row as LeaveRequest) ?? null;
   }
 
+  async setLeaveRequestId(id: string, requestId: string): Promise<void> {
+    await this.db
+      .update(leaveRequests)
+      .set({ requestId })
+      .where(eq(leaveRequests.id, id));
+  }
+
   async hasOverlappingLeave(
     employeeId: string,
     startDate: string,
@@ -191,6 +199,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
         workDate: input.workDate,
         hours: String(input.hours),
         reason: input.reason,
+        requestId: input.requestId ?? null,
       })
       .returning();
     return row as OvertimeEntry;
@@ -246,6 +255,13 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .where(eq(overtimeEntries.id, id))
       .returning();
     return (row as OvertimeEntry) ?? null;
+  }
+
+  async setOvertimeRequestId(id: string, requestId: string): Promise<void> {
+    await this.db
+      .update(overtimeEntries)
+      .set({ requestId })
+      .where(eq(overtimeEntries.id, id));
   }
 
   // ── Shift logs ─────────────────────────────────────────────────────────────

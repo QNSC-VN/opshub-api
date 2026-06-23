@@ -37,6 +37,8 @@
       "@modules/audit/*": ["./libs/modules/audit/src/*"],
       "@modules/authz": ["./libs/modules/authz/src/index"],
       "@modules/authz/*": ["./libs/modules/authz/src/*"],
+      "@modules/requests": ["./libs/modules/requests/src/index"],
+      "@modules/requests/*": ["./libs/modules/requests/src/*"],
       "@modules/notifications": ["./libs/modules/notifications/src/index"],
       "@modules/notifications/*": ["./libs/modules/notifications/src/*"],
       "@platform/email": ["./libs/platform/src/email/index"],

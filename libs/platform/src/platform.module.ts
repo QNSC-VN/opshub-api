@@ -12,6 +12,8 @@ import { RoleGuard } from './auth/role.guard';
 import { ScopeEvaluator } from './auth/scope-evaluator';
 import { AuthzService } from './auth/authz.service';
 import { PolicyGuard } from './auth/policy.guard';
+import { RequestRegistry } from './requests/request-registry';
+import { RequestEngine } from './requests/request-engine.service';
 import { OutboxService } from './outbox/outbox.service';
 import { HealthController } from './observability/health.controller';
 import { HttpLoggingInterceptor } from './http/http-logging.interceptor';
@@ -66,6 +68,8 @@ import { NotificationPubSubService } from './notifications/notification-pubsub.s
     ScopeEvaluator,
     AuthzService,
     PolicyGuard,
+    RequestRegistry,
+    RequestEngine,
     OutboxService,
     HttpLoggingInterceptor,
     CacheService,
@@ -98,6 +102,8 @@ import { NotificationPubSubService } from './notifications/notification-pubsub.s
     ScopeEvaluator,
     AuthzService,
     PolicyGuard,
+    RequestRegistry,
+    RequestEngine,
     OutboxService,
     HttpLoggingInterceptor,
     CacheService,

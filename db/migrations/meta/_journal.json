@@ -43,6 +43,13 @@
       "when": 1782240423483,
       "tag": "0005_great_norrin_radd",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782242635065,
+      "tag": "0006_amused_skullbuster",
+      "breakpoints": true
     }
   ]
 }
