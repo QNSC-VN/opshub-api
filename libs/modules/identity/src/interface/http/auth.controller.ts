@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, CurrentUser, Public, UnauthorizedException, ErrorCodes } from '@platform';
+import { Auth, ApiCommonErrors, CurrentUser, Public, UnauthorizedException, PermissionDeniedException, ErrorCodes, AppConfigService } from '@platform';
 import type { JwtPayload } from '@platform';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { AuthService } from '../../application/auth.service';
@@ -22,10 +22,16 @@ function refreshCookieOptions(maxAge: number, isProd: boolean) {
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  readonly #isProd = process.env['NODE_ENV'] === 'production';
-  readonly #refreshMaxAge = 7 * 24 * 60 * 60; // 7 days in seconds
+  readonly #isProd: boolean;
+  readonly #refreshMaxAge: number;
 
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly config: AppConfigService,
+  ) {
+    this.#isProd = config.get('NODE_ENV') === 'production';
+    this.#refreshMaxAge = config.get('JWT_REFRESH_EXPIRY_DAYS') * 24 * 60 * 60;
+  }
 
   @Post('entra-login')
   @Public()
@@ -46,14 +52,15 @@ export class AuthController {
   @Post('dev-login')
   @Public()
   @HttpCode(200)
-  @ApiOperation({
-    summary: 'Dev login — mints a JWT for a known employee email (replaced by Entra OIDC in prod)',
-  })
-  @ApiCommonErrors(401, 422)
+  @ApiOperation({ summary: 'Dev login — only available outside production (Entra OIDC is used in prod)' })
+  @ApiCommonErrors(401, 403, 422)
   async devLogin(
     @Body() dto: DevLoginDto,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<AuthResponseDto> {
+    if (this.#isProd) {
+      throw new PermissionDeniedException('Dev login is disabled in production');
+    }
     const { accessToken, expiresIn, rawRefreshToken } = await this.authService.devLogin(dto.email);
     reply.setCookie(REFRESH_COOKIE, rawRefreshToken, refreshCookieOptions(this.#refreshMaxAge, this.#isProd));
     return { accessToken, expiresIn };
@@ -79,10 +86,9 @@ export class AuthController {
   }
 
   @Post('logout')
-  @Auth()
+  @Public()
   @HttpCode(204)
   @ApiOperation({ summary: 'Revoke the current refresh token session and clear the cookie' })
-  @ApiCommonErrors(401)
   async logout(
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
