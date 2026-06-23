@@ -3,12 +3,31 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Auth, ApiCommonErrors, CurrentUser, Public } from '@platform';
 import type { JwtPayload } from '@platform';
 import { AuthService } from '../../application/auth.service';
-import { DevLoginDto, AuthResponseDto, MeResponseDto } from './dto/auth.dto';
+import { DevLoginDto, EntraLoginDto, AuthResponseDto, MeResponseDto } from './dto/auth.dto';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('entra-login')
+  @Public()
+  @ApiOperation({
+    summary: 'SSO login — validate Entra ID id_token, JIT-provision employee, mint internal JWT',
+  })
+  @ApiCommonErrors(401)
+  async entraLogin(@Body() dto: EntraLoginDto): Promise<AuthResponseDto> {
+    const { accessToken, employee } = await this.authService.entraLogin(dto.idToken);
+    return {
+      accessToken,
+      employee: {
+        id: employee.id,
+        email: employee.email,
+        displayName: employee.displayName,
+        roles: employee.roles,
+      },
+    };
+  }
 
   @Post('dev-login')
   @Public()

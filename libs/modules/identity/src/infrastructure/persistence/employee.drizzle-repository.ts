@@ -41,6 +41,45 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
     return (row as Employee) ?? null;
   }
 
+  async findByEntraOid(oid: string): Promise<Employee | null> {
+    const [row] = await this.db
+      .select()
+      .from(employees)
+      .where(eq(employees.entraOid, oid))
+      .limit(1);
+    return (row as Employee) ?? null;
+  }
+
+  async upsertByEntraOid(
+    oid: string,
+    input: Partial<import('../../domain/employee.types').CreateEmployeeInput> & { email: string; displayName: string },
+  ): Promise<Employee> {
+    const existing = await this.findByEntraOid(oid);
+    if (existing) {
+      // Update display name and email in case they changed in Entra
+      const [updated] = await this.db
+        .update(employees)
+        .set({ displayName: input.displayName, email: input.email.toLowerCase(), updatedAt: new Date() })
+        .where(eq(employees.entraOid, oid))
+        .returning();
+      return updated as Employee;
+    }
+
+    // JIT-provision: check if an employee row exists by email (pre-created by IT admin)
+    const byEmail = await this.findByEmail(input.email.toLowerCase());
+    if (byEmail) {
+      const [linked] = await this.db
+        .update(employees)
+        .set({ entraOid: oid, displayName: input.displayName, updatedAt: new Date() })
+        .where(eq(employees.id, byEmail.id))
+        .returning();
+      return linked as Employee;
+    }
+
+    // Create a brand-new employee row (self-service first login)
+    return this.create({ ...input, entraOid: oid, roles: [] });
+  }
+
   async list(
     filters: EmployeeFilters,
     limit: number,

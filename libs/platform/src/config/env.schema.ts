@@ -22,8 +22,12 @@ export const EnvSchema = z.object({
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(20),
 
   // ── Auth ───────────────────────────────────────────────────────────────────
-  // Scaffold uses HS256 + a dev-login endpoint. Production target: Entra ID OIDC.
+  // Scaffold: HS256 + dev-login. Production: Entra ID OIDC (MSAL → entra-login).
   JWT_SECRET: z.string().min(32),
+
+  // Entra ID SSO — required in production, optional in dev (enables entra-login endpoint).
+  ENTRA_TENANT_ID: z.string().uuid().optional(),
+  ENTRA_CLIENT_ID: z.string().uuid().optional(),
   // Used to sign fastify-cookie (required for CSRF signed cookies).
   COOKIE_SECRET: z.string().min(32),
   JWT_ACCESS_EXPIRY: z.string().default('8h'),
