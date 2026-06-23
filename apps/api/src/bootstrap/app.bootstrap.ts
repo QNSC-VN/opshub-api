@@ -29,7 +29,8 @@ export async function bootstrapApp(app: NestFastifyApplication): Promise<void> {
     },
   });
   await app.register(fastifyCompress);
-  await app.register(fastifyCookie);
+  const cookieSecret = config.get('COOKIE_SECRET');
+  await app.register(fastifyCookie, { secret: cookieSecret });
   // CSRF double-submit cookie — protects state-mutating endpoints.
   await app.register(fastifyCsrf, { cookieOpts: { signed: true } });
 

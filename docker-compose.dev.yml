@@ -8,7 +8,7 @@ services:
     ports:
       - '5432:5432'
     volumes:
-      - opshub_pgdata:/var/lib/postgresql/data
+      - opshub_pgdata:/var/lib/postgresql
       - ./db/init:/docker-entrypoint-initdb.d
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U opshub']

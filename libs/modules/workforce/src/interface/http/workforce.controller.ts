@@ -250,6 +250,11 @@ export class WorkforceController {
     @Body() dto: CreateShiftLogDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<ShiftLogResponseDto> {
-    return toShiftLogDto(await this.service.createShiftLog(dto, user));
+    return toShiftLogDto(
+      await this.service.createShiftLog(
+        { ...dto, startsAt: new Date(dto.startsAt), endsAt: new Date(dto.endsAt) },
+        user,
+      ),
+    );
   }
 }

@@ -98,8 +98,8 @@ export class OvertimeResponseDto {
 export const CreateShiftLogSchema = z
   .object({
     shiftType: z.enum(['night', 'on_call', 'weekend']),
-    startsAt: z.coerce.date(),
-    endsAt: z.coerce.date(),
+    startsAt: z.string().datetime(),
+    endsAt: z.string().datetime(),
     note: z.string().max(500).optional(),
   })
   .refine((v) => v.startsAt < v.endsAt, {

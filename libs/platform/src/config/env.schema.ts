@@ -24,6 +24,8 @@ export const EnvSchema = z.object({
   // ── Auth ───────────────────────────────────────────────────────────────────
   // Scaffold uses HS256 + a dev-login endpoint. Production target: Entra ID OIDC.
   JWT_SECRET: z.string().min(32),
+  // Used to sign fastify-cookie (required for CSRF signed cookies).
+  COOKIE_SECRET: z.string().min(32),
   JWT_ACCESS_EXPIRY: z.string().default('8h'),
   JWT_ISSUER: z.string().default('opshub-api'),
   JWT_AUDIENCE: z.string().default('opshub-web'),
