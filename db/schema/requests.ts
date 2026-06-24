@@ -50,6 +50,16 @@ export const requestItems = requestsSchema.table(
     slaDeadline: timestamp('sla_deadline', { withTimezone: true }),
     /** Timestamp when the SLA breach was first detected by the cron. Null = not yet breached. */
     slaBreachedAt: timestamp('sla_breached_at', { withTimezone: true }),
+    /**
+     * Current approval step (1-based). Incremented by the engine as each step
+     * is approved in a multi-step chain. Always 1 for single-step workflows.
+     */
+    currentStep: integer('current_step').notNull().default(1),
+    /**
+     * Total number of approval steps required, copied from the TypeDef at submit
+     * time. 1 = single-step (default). Immutable after submit.
+     */
+    totalSteps: integer('total_steps').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -88,5 +98,28 @@ export const requestApprovals = requestsSchema.table(
   },
   (t) => ({
     requestIdx: index('ix_ra_request').on(t.requestId, t.step),
+  }),
+);
+
+/**
+ * Discussion thread attached to a request item. Any party (requester or
+ * approver) can post comments while the request is open. Unlike approval notes,
+ * comments do not trigger state transitions — they are purely informational.
+ */
+export const requestComments = requestsSchema.table(
+  'request_comments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    requestId: uuid('request_id')
+      .notNull()
+      .references(() => requestItems.id, { onDelete: 'cascade' }),
+    authorId: uuid('author_id').notNull(),
+    body: text('body').notNull(),
+    /** Set when the author edits the comment. Null = never edited. */
+    editedAt: timestamp('edited_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    requestIdx: index('ix_rcomm_request').on(t.requestId, t.createdAt),
   }),
 );

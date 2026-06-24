@@ -23,6 +23,21 @@ export const ReviewRequestSchema = z.object({
 
 export class ReviewRequestDto extends createZodDto(ReviewRequestSchema) {}
 
+export const AddCommentSchema = z.object({
+  body: z.string().min(1).max(5000),
+});
+
+export class AddCommentDto extends createZodDto(AddCommentSchema) {}
+
+export class RequestCommentResponseDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() requestId!: string;
+  @ApiProperty() authorId!: string;
+  @ApiProperty() body!: string;
+  @ApiPropertyOptional({ nullable: true }) editedAt!: string | null;
+  @ApiProperty() createdAt!: string;
+}
+
 export class RequestApprovalResponseDto {
   @ApiProperty() id!: string;
   @ApiProperty() requestId!: string;
@@ -53,6 +68,10 @@ export class RequestItemResponseDto {
   slaDeadline!: string | null;
   @ApiPropertyOptional({ nullable: true, description: 'When SLA breach was first detected' })
   slaBreachedAt!: string | null;
+  @ApiProperty({ description: 'Current approval step (1-based). Increments as each step is approved.' })
+  currentStep!: number;
+  @ApiProperty({ description: 'Total approval steps required (from TypeDef). 1 = single-step.' })
+  totalSteps!: number;
   @ApiProperty() createdAt!: string;
   @ApiProperty() updatedAt!: string;
   @ApiPropertyOptional({ type: [RequestApprovalResponseDto] })

@@ -10,6 +10,33 @@ export type RequestStatus =
 
 export type RequestPriority = 'low' | 'normal' | 'high' | 'urgent';
 
+/**
+ * Defines a single step in a multi-step approval chain.
+ * Steps are processed in ascending `step` order.
+ */
+export interface ApprovalStepDef {
+  /** 1-based step number. */
+  step: number;
+  /** Permission required of the approver at this step. */
+  requiredPermission: string;
+  /**
+   * Optional: resolve the default assignee for this step when the engine
+   * advances to it. Called inside the approval transaction.
+   * Return null = unassigned (any holder of requiredPermission can approve).
+   */
+  resolverFn?: (payload: Record<string, unknown>, db: DbExecutor) => Promise<string | null>;
+}
+
+/** A comment posted on a request item (non-decision, purely informational). */
+export interface RequestComment {
+  id: string;
+  requestId: string;
+  authorId: string;
+  body: string;
+  editedAt: Date | null;
+  createdAt: Date;
+}
+
 export interface RequestItem {
   id: string;
   type: string;
@@ -28,6 +55,13 @@ export interface RequestItem {
   slaDeadline: Date | null;
   /** Timestamp of first SLA breach detection. Null = within SLA or no SLA. */
   slaBreachedAt: Date | null;
+  /**
+   * Which approval step the request is currently waiting on (1-based).
+   * Always 1 for single-step workflows. Incremented as each step is approved.
+   */
+  currentStep: number;
+  /** Total steps required as defined by the TypeDef. 1 for single-step. Immutable after submit. */
+  totalSteps: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -49,6 +83,7 @@ export interface RequestApproval {
 
 export interface RequestItemWithApprovals extends RequestItem {
   approvals: RequestApproval[];
+  comments?: RequestComment[];
 }
 
 export interface SubmitRequestOptions {
@@ -93,12 +128,34 @@ export interface RequestTypeDef<TPayload = Record<string, unknown>> {
    * This is separate from expiry: SLA breach = notification only; expiry = auto-cancel.
    */
   readonly slaHours?: number;
+  /**
+   * Multi-step approval chain. When provided, overrides `requiredApprovalPermission`
+   * (each step carries its own permission). Steps are processed in ascending step
+   * number order. `onApprove` is called only when the **final** step is approved.
+   *
+   * If absent, falls back to single-step behavior using `requiredApprovalPermission`.
+   */
+  readonly approvalSteps?: ApprovalStepDef[];
   /** Called inside the submit transaction. Use for domain validation (e.g. overlap check). */
   onSubmit?(payload: TPayload, requesterId: string, tx: DbExecutor): Promise<void>;
   /** Called inside the approval transaction. REQUIRED: create domain records here. */
   onApprove(
     payload: TPayload,
     requestId: string,
+    approverId: string,
+    tx: DbExecutor,
+  ): Promise<void>;
+  /**
+   * Called inside the transaction when an **intermediate** step is approved (not the final step).
+   * Use to send notifications or perform intermediate domain actions.
+   * The engine has already updated `currentStep` and `assigneeId` before calling this.
+   */
+  onStepApproved?(
+    payload: TPayload,
+    requestId: string,
+    completedStep: number,
+    nextStep: number,
+    nextAssigneeId: string | null,
     approverId: string,
     tx: DbExecutor,
   ): Promise<void>;

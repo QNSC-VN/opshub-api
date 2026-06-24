@@ -1,6 +1,12 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { type DbExecutor, RequestRegistry, RequestTypeDef } from '@platform';
+import {
+  type DbExecutor,
+  RequestRegistry,
+  RequestTypeDef,
+  type ApprovalStepDef,
+  NotificationSchedulerService,
+} from '@platform';
 import { newId } from '@shared-kernel';
 import { accessRequests, accessGrants } from '../../../../../db/schema';
 
@@ -26,18 +32,62 @@ export class AccessRequestTypeDef
   implements RequestTypeDef<AccessRequestPayload>, OnModuleInit
 {
   readonly type = 'access_request';
+  /**
+   * Fallback for single-step mode (backward compat). When `approvalSteps` is
+   * defined, the engine uses per-step permissions instead.
+   */
   readonly requiredApprovalPermission = 'access_request.approve';
   readonly allowSelfApproval = false;
   readonly defaultExpiryHours = 168; // 7 days
   /** SLA: notify if not approved within 72 h (3 business days) */
   readonly slaHours = 72;
 
+  /**
+   * Two-step approval chain:
+   *   Step 1 — Line manager / access approver (`access_request.approve`)
+   *   Step 2 — IT Security reviewer (`access_request.security_approve`)
+   *
+   * The engine handles state transitions and assignee updates between steps.
+   * `onApprove` (called only on step-2 final approval) creates the access grant.
+   */
+  readonly approvalSteps: ApprovalStepDef[] = [
+    { step: 1, requiredPermission: 'access_request.approve' },
+    { step: 2, requiredPermission: 'access_request.security_approve' },
+  ];
+
   constructor(
     private readonly registry: RequestRegistry,
+    private readonly notifScheduler: NotificationSchedulerService,
   ) {}
 
   onModuleInit(): void {
     this.registry.register(this);
+  }
+
+  /**
+   * Called when step 1 completes (manager approved).
+   * Notifies the requester that step 1 is done and IT Security review is pending.
+   */
+  async onStepApproved(
+    payload: AccessRequestPayload,
+    requestId: string,
+    completedStep: number,
+    _nextStep: number,
+    _nextAssigneeId: string | null,
+    _approverId: string,
+    tx: DbExecutor,
+  ): Promise<void> {
+    // Notify the requester that step 1 passed
+    await this.notifScheduler.schedule(tx, {
+      type: 'access_request.submitted', // reuse "pending" template as "still in review"
+      vars: {
+        resourceName: String(payload.target),
+        requesterName: String(payload.requesterId),
+      },
+      recipientId: payload.requesterId,
+      resourceId: requestId,
+      idempotencyKey: `ar_step${completedStep}_notify:${requestId}`,
+    });
   }
 
   async onApprove(

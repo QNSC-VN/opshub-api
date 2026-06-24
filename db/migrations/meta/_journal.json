@@ -57,6 +57,13 @@
       "when": 1782276079155,
       "tag": "0007_futuristic_the_captain",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1782277245820,
+      "tag": "0008_lucky_silver_centurion",
+      "breakpoints": true
     }
   ]
 }

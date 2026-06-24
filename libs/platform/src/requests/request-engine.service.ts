@@ -10,14 +10,16 @@ import {
   ConflictException,
 } from '../errors/exceptions';
 import { OutboxService } from '../outbox/outbox.service';
-import { requestItems, requestApprovals } from '../../../../db/schema';
+import { requestItems, requestApprovals, requestComments } from '../../../../db/schema';
 import { RequestRegistry } from './request-registry';
 import { DelegationService } from '../authz/delegation.service';
+import { NotificationSchedulerService } from '../notifications/notification-scheduler.service';
 import type {
   RequestFilters,
   RequestItem,
   RequestItemWithApprovals,
   RequestStatus,
+  RequestComment,
   SubmitRequestOptions,
 } from './request-engine.types';
 
@@ -46,6 +48,7 @@ export class RequestEngine {
     private readonly authz: AuthzService,
     private readonly outbox: OutboxService,
     private readonly delegation: DelegationService,
+    private readonly notifScheduler: NotificationSchedulerService,
   ) {}
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -68,6 +71,9 @@ export class RequestEngine {
     const slaHours = def.slaHours ?? null;
     const slaDeadline = slaHours ? new Date(Date.now() + slaHours * 3_600_000) : null;
 
+    // Multi-step chain metadata — stored immutably at submit time
+    const totalSteps = def.approvalSteps ? def.approvalSteps.length : 1;
+
     const item = await this.db.transaction(async (tx) => {
       // Allow TypeDef to validate payload / check domain constraints
       if (def.onSubmit) {
@@ -87,6 +93,8 @@ export class RequestEngine {
           expiresAt,
           slaHours,
           slaDeadline,
+          currentStep: 1,
+          totalSteps,
         })
         .returning();
 
@@ -112,59 +120,127 @@ export class RequestEngine {
 
     const def = this.registry.get(request.type);
 
-    // Approval delegation: check if actor is acting as delegate for another user
-    const activeDelegation = await this.delegation.findActiveDelegationTo(actor.sub);
+    // ── Multi-step: resolve which step we're on ──────────────────────────────
+    const steps = def.approvalSteps;
+    const currentStep = request.currentStep;
+    const stepDef = steps?.find((s) => s.step === currentStep) ?? null;
+    const requiredPermission = stepDef?.requiredPermission ?? def.requiredApprovalPermission;
+    const maxStep = steps ? Math.max(...steps.map((s) => s.step)) : 1;
+    const isFinalStep = !steps || currentStep >= maxStep;
 
-    // SoD check against the effective identity (delegator if delegated, else actor)
+    // ── Delegation check ─────────────────────────────────────────────────────
+    const activeDelegation = await this.delegation.findActiveDelegationTo(actor.sub);
     const sodSubject = activeDelegation ? activeDelegation.fromUserId : actor.sub;
+
     if (!def.allowSelfApproval && request.requesterId === sodSubject) {
       throw new PermissionDeniedException(
         'REQUEST_SOD_VIOLATION: Requester cannot approve their own request',
       );
     }
 
-    // Permission check: actor's own permissions OR delegator's permissions (union semantics)
-    const actorAllowed = await this.authz.check(actor.sub, def.requiredApprovalPermission);
+    // Permission check: actor OR delegator (union semantics)
+    const actorAllowed = await this.authz.check(actor.sub, requiredPermission);
     const delegatorAllowed = activeDelegation
-      ? await this.authz.check(activeDelegation.fromUserId, def.requiredApprovalPermission)
+      ? await this.authz.check(activeDelegation.fromUserId, requiredPermission)
       : false;
     if (!actorAllowed && !delegatorAllowed) {
       throw new PermissionDeniedException(
-        `Missing permission: ${def.requiredApprovalPermission}`,
+        `Missing permission for step ${currentStep}: ${requiredPermission}`,
       );
     }
 
     const now = new Date();
     const updated = await this.db.transaction(async (tx) => {
+      const nextStep = currentStep + 1;
+      const nextStepDef = steps?.find((s) => s.step === nextStep) ?? null;
+
+      // Resolve the assignee for the next step (if defined)
+      let nextAssigneeId: string | null = request.assigneeId;
+      if (!isFinalStep && nextStepDef?.resolverFn) {
+        nextAssigneeId = (await nextStepDef.resolverFn(request.payload, tx)) ?? request.assigneeId;
+      }
+
+      const newStatus: RequestStatus = isFinalStep ? 'approved' : 'in_review';
+
       const [row] = await tx
         .update(requestItems)
-        .set({ status: 'approved', resolvedAt: now, resolutionNote: note, updatedAt: now })
+        .set({
+          status: newStatus,
+          currentStep: isFinalStep ? currentStep : nextStep,
+          assigneeId: isFinalStep ? request.assigneeId : nextAssigneeId,
+          resolvedAt: isFinalStep ? now : null,
+          resolutionNote: isFinalStep ? note : null,
+          updatedAt: now,
+        })
         .where(eq(requestItems.id, requestId))
         .returning();
 
       await tx.insert(requestApprovals).values({
         id: newId(),
         requestId,
-        step: 1,
+        step: currentStep,
         approverId: actor.sub,
         decision: 'approved',
         note,
         delegatedFromId: activeDelegation?.fromUserId ?? null,
       });
 
-      await def.onApprove(request.payload, requestId, actor.sub, tx);
+      if (isFinalStep) {
+        // Final approval: call domain hook
+        await def.onApprove(request.payload, requestId, actor.sub, tx);
+      } else {
+        // Intermediate approval: call optional step hook and notify next assignee
+        if (def.onStepApproved) {
+          await def.onStepApproved(
+            request.payload,
+            requestId,
+            currentStep,
+            nextStep,
+            nextAssigneeId,
+            actor.sub,
+            tx,
+          );
+        }
+
+        // Notify the next assignee if one is resolved
+        if (nextAssigneeId) {
+          await this.notifScheduler.schedule(tx, {
+            type: 'request.step_ready',
+            vars: {
+              requestType: request.type,
+              requestId,
+              completedStep: currentStep,
+              nextStep,
+              totalSteps: maxStep,
+            },
+            recipientId: nextAssigneeId,
+            resourceId: requestId,
+            idempotencyKey: `step_ready:${requestId}:${nextStep}`,
+          });
+        }
+      }
 
       await this.outbox.enqueue(tx, {
         aggregateType: 'request',
         aggregateId: requestId,
-        eventType: 'request.approved',
-        payload: { requestId, type: request.type, approverId: actor.sub },
+        eventType: isFinalStep ? 'request.approved' : 'request.step_approved',
+        payload: {
+          requestId,
+          type: request.type,
+          approverId: actor.sub,
+          step: currentStep,
+          isFinalStep,
+          totalSteps: maxStep,
+        },
       });
 
       return row;
     });
 
-    this.logger.log({ requestId, type: request.type }, 'Request approved');
+    this.logger.log(
+      { requestId, type: request.type, step: currentStep, isFinalStep },
+      isFinalStep ? 'Request approved' : `Request step ${currentStep}/${maxStep} approved`,
+    );
     return updated as RequestItem;
   }
 
@@ -185,13 +261,19 @@ export class RequestEngine {
       );
     }
 
-    const actorAllowed = await this.authz.check(actor.sub, def.requiredApprovalPermission);
+    // Resolve permission for current step (mirrors approve())
+    const steps = def.approvalSteps;
+    const currentStep = request.currentStep;
+    const stepDef = steps?.find((s) => s.step === currentStep) ?? null;
+    const requiredPermission = stepDef?.requiredPermission ?? def.requiredApprovalPermission;
+
+    const actorAllowed = await this.authz.check(actor.sub, requiredPermission);
     const delegatorAllowed = activeDelegation
-      ? await this.authz.check(activeDelegation.fromUserId, def.requiredApprovalPermission)
+      ? await this.authz.check(activeDelegation.fromUserId, requiredPermission)
       : false;
     if (!actorAllowed && !delegatorAllowed) {
       throw new PermissionDeniedException(
-        `Missing permission: ${def.requiredApprovalPermission}`,
+        `Missing permission for step ${currentStep}: ${requiredPermission}`,
       );
     }
 
@@ -206,7 +288,7 @@ export class RequestEngine {
       await tx.insert(requestApprovals).values({
         id: newId(),
         requestId,
-        step: 1,
+        step: currentStep,
         approverId: actor.sub,
         decision: 'rejected',
         note,
@@ -402,6 +484,36 @@ export class RequestEngine {
       )
       .limit(batchSize);
     return rows.map((r) => r.id);
+  }
+
+  // ── Comments ───────────────────────────────────────────────────────────────
+
+  /** Post a discussion comment on a request. Does not trigger any state transition. */
+  async addComment(requestId: string, body: string, actor: Actor): Promise<RequestComment> {
+    // Verify request exists (throws if not)
+    await this.getOrFail(requestId);
+
+    const [row] = await this.db
+      .insert(requestComments)
+      .values({
+        id: newId(),
+        requestId,
+        authorId: actor.sub,
+        body: body.trim(),
+      })
+      .returning();
+
+    return row as RequestComment;
+  }
+
+  /** List comments for a request, ordered oldest-first. */
+  async listComments(requestId: string): Promise<RequestComment[]> {
+    const rows = await this.db
+      .select()
+      .from(requestComments)
+      .where(eq(requestComments.requestId, requestId))
+      .orderBy(asc(requestComments.createdAt));
+    return rows as RequestComment[];
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────

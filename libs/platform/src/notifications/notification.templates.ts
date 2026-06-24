@@ -13,7 +13,8 @@ export type NotificationTemplateName =
   | 'asset.unassigned'
   | 'employee.offboarded'
   | 'request.sla_breach'
-  | 'request.delegation_created';
+  | 'request.delegation_created'
+  | 'request.step_ready';
 
 // ── Per-template variable shapes ─────────────────────────────────────────────
 
@@ -50,6 +51,13 @@ export interface NotificationTemplateVars {
   'request.delegation_created': {
     delegatorName: string;
     endsAt: string; // ISO string
+  };
+  'request.step_ready': {
+    requestType: string;
+    requestId: string;
+    completedStep: number;
+    nextStep: number;
+    totalSteps: number;
   };
 }
 
@@ -110,6 +118,12 @@ const templates: {
     return {
       title: 'Approval delegation received',
       body:  `${v.delegatorName} has delegated their approval authority to you until ${v.endsAt}.`,
+    };
+  },
+  'request.step_ready'(v) {
+    return {
+      title: `Action required: ${v.requestType} approval (step ${v.nextStep}/${v.totalSteps})`,
+      body:  `Step ${v.completedStep} has been approved. Your review is now required (step ${v.nextStep} of ${v.totalSteps}).`,
     };
   },
 };

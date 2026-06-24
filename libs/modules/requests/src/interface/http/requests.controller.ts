@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Query, Body, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body, ParseUUIDPipe, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import {
   Auth,
@@ -10,12 +10,15 @@ import {
   NotFoundException,
   ErrorCodes,
   type RequestItemWithApprovals,
+  type RequestComment,
 } from '@platform';
 import {
   ListRequestsQueryDto,
   ReviewRequestDto,
+  AddCommentDto,
   RequestItemResponseDto,
   RequestApprovalResponseDto,
+  RequestCommentResponseDto,
 } from './dto/requests.dto';
 
 function toApprovalDto(a: RequestItemWithApprovals['approvals'][number]): RequestApprovalResponseDto {
@@ -47,9 +50,22 @@ function toDto(r: RequestItemWithApprovals): RequestItemResponseDto {
     slaHours: r.slaHours,
     slaDeadline: r.slaDeadline ? r.slaDeadline.toISOString() : null,
     slaBreachedAt: r.slaBreachedAt ? r.slaBreachedAt.toISOString() : null,
+    currentStep: r.currentStep,
+    totalSteps: r.totalSteps,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
     approvals: r.approvals.map(toApprovalDto),
+  };
+}
+
+function toCommentDto(c: RequestComment): RequestCommentResponseDto {
+  return {
+    id: c.id,
+    requestId: c.requestId,
+    authorId: c.authorId,
+    body: c.body,
+    editedAt: c.editedAt ? c.editedAt.toISOString() : null,
+    createdAt: c.createdAt.toISOString(),
   };
 }
 
@@ -140,5 +156,37 @@ export class RequestsController {
   ): Promise<RequestItemResponseDto> {
     await this.engine.cancel(id, user);
     return toDto(await this.mustGetById(id));
+  }
+
+  // ── Comments ───────────────────────────────────────────────────────────────
+
+  /**
+   * List discussion comments on a request, ordered oldest-first.
+   * Comments are informational only — they do not affect request state.
+   */
+  @Get(':id/comments')
+  @Auth()
+  @ApiOperation({ summary: 'List comments on a request' })
+  async listComments(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<RequestCommentResponseDto[]> {
+    // Ensure request exists (throws 404 if not)
+    await this.mustGetById(id);
+    const comments = await this.engine.listComments(id);
+    return comments.map(toCommentDto);
+  }
+
+  /** Post a discussion comment. Does not trigger any state transition. */
+  @Post(':id/comments')
+  @Auth()
+  @HttpCode(201)
+  @ApiOperation({ summary: 'Post a comment on a request' })
+  async addComment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AddCommentDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<RequestCommentResponseDto> {
+    const comment = await this.engine.addComment(id, dto.body, user);
+    return toCommentDto(comment);
   }
 }
