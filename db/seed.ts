@@ -1,9 +1,16 @@
 /**
- * Dev seed — inserts representative employees plus the RBAC catalog (permissions,
- * system roles) and baseline role assignments for local testing.
- * Run with:  tsx --env-file=.env db/seed.ts
+ * Production seed — bootstraps the RBAC catalog (permissions + system roles)
+ * and a representative set of employee accounts for every role.
  *
- * Safe to run multiple times (idempotent — ON CONFLICT DO NOTHING / existence checks).
+ * Design goals:
+ *  - Idempotent: safe to run multiple times on a live DB (ON CONFLICT DO NOTHING
+ *    / existence checks).
+ *  - Complete: every system role has at least one user so devs can test all
+ *    permission boundaries without manual setup.
+ *  - Consistent: the `roles` JSONB column on employees (used in JWT claims)
+ *    always matches the RBAC table entries.
+ *
+ * Run with:  tsx --env-file=.env db/seed.ts
  */
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
@@ -11,58 +18,65 @@ import { Pool } from 'pg';
 import { employees } from './schema/identity';
 import { permissions, roles, rolePermissions, userRoleAssignments } from './schema/authz';
 
-// ── Permission catalog ─────────────────────────────────────────────────────────
+// ── Permission catalog ────────────────────────────────────────────────────────
 const PERMISSIONS: Array<{ key: string; description: string }> = [
-  { key: '*', description: 'Wildcard — grants every permission' },
-  { key: 'rbac.read', description: 'View roles, permissions and assignments' },
-  { key: 'rbac.manage', description: 'Create/edit/delete roles and permissions' },
-  { key: 'role.assign', description: 'Grant and revoke role assignments' },
-  { key: 'employee.read', description: 'View employee records' },
-  { key: 'employee.write', description: 'Create and update employee records' },
-  { key: 'employee.offboard', description: 'Offboard employees and revoke access' },
-  { key: 'asset.read', description: 'View assets' },
-  { key: 'asset.write', description: 'Create and update assets' },
-  { key: 'asset.reassign', description: 'Reassign assets between holders' },
-  { key: 'access_request.read', description: 'View privileged-access requests' },
-  { key: 'access_request.approve', description: 'Approve/reject privileged-access requests (step 1 — manager tier)' },
-  { key: 'access_request.security_approve', description: 'IT Security step-2 approval for privileged-access requests' },
-  { key: 'compliance.read', description: 'View compliance findings and software' },
+  // Meta / RBAC
+  { key: '*',              description: 'Wildcard — grants every permission (admin only)' },
+  { key: 'rbac.read',     description: 'View roles, permissions and assignments' },
+  { key: 'rbac.manage',   description: 'Create / edit / delete roles and permissions' },
+  { key: 'role.assign',   description: 'Grant and revoke role assignments' },
+  // Identity / HR
+  { key: 'employee.read',     description: 'View employee directory records' },
+  { key: 'employee.write',    description: 'Create and update employee records' },
+  { key: 'employee.offboard', description: 'Trigger offboarding and revoke all access' },
+  // Assets
+  { key: 'asset.read',     description: 'View hardware asset inventory' },
+  { key: 'asset.write',    description: 'Create and update asset records' },
+  { key: 'asset.reassign', description: 'Reassign assets between employees' },
+  // Access requests
+  { key: 'access_request.read',             description: 'View privileged-access requests' },
+  { key: 'access_request.approve',          description: 'Step-1 approval for access requests (manager tier)' },
+  { key: 'access_request.security_approve', description: 'Step-2 IT-Security approval for access requests' },
+  // Compliance
+  { key: 'compliance.read',   description: 'View compliance findings and software catalog' },
   { key: 'compliance.manage', description: 'Resolve findings and manage compliance data' },
-  { key: 'workforce.read', description: 'View timesheets and leave' },
-  { key: 'workforce.approve', description: 'Approve timesheets and leave' },
-  { key: 'audit.read', description: 'Read the audit log' },
+  // Workforce
+  { key: 'workforce.read',    description: 'View timesheets, leave and overtime entries' },
+  { key: 'workforce.approve', description: 'Approve or reject leave and overtime requests' },
+  // Audit
+  { key: 'audit.read', description: 'Read the immutable audit log' },
+  // Reports
   { key: 'reports.read', description: 'View aggregate reports and analytics dashboards' },
+  // Notifications
+  { key: 'notifications.manage', description: 'Manage notification preferences for all users' },
 ];
 
-// ── System roles → permission bundles ───────────────────────────────────────────
+// ── System roles → permission bundles ────────────────────────────────────────
 const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
-  { key: 'admin', name: 'Platform Administrator', permissions: ['*'] },
+  {
+    key: 'admin',
+    name: 'Platform Administrator',
+    permissions: ['*'],
+  },
   {
     key: 'it-admin',
     name: 'IT Administrator',
     permissions: [
-      'employee.read',
-      'employee.write',
-      'asset.read',
-      'asset.write',
-      'asset.reassign',
-      'access_request.read',
-      'access_request.approve',
-      'access_request.security_approve',
+      'employee.read', 'employee.write',
+      'asset.read', 'asset.write', 'asset.reassign',
+      'access_request.read', 'access_request.approve', 'access_request.security_approve',
       'compliance.read',
       'audit.read',
       'reports.read',
+      'rbac.read',
     ],
   },
   {
     key: 'security',
     name: 'Security Officer',
     permissions: [
-      'compliance.read',
-      'compliance.manage',
-      'access_request.read',
-      'access_request.approve',
-      'access_request.security_approve',
+      'compliance.read', 'compliance.manage',
+      'access_request.read', 'access_request.approve', 'access_request.security_approve',
       'audit.read',
       'reports.read',
     ],
@@ -71,11 +85,9 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
     key: 'hr',
     name: 'HR Manager',
     permissions: [
-      'employee.read',
-      'employee.write',
-      'employee.offboard',
-      'workforce.read',
-      'workforce.approve',
+      'employee.read', 'employee.write', 'employee.offboard',
+      'workforce.read', 'workforce.approve',
+      'audit.read',
       'reports.read',
     ],
   },
@@ -84,73 +96,132 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
     name: 'People Manager',
     permissions: [
       'employee.read',
-      'workforce.read',
-      'workforce.approve',
-      'access_request.read',
-      'access_request.approve',
+      'workforce.read', 'workforce.approve',
+      'access_request.read', 'access_request.approve',
       'reports.read',
     ],
   },
   {
     key: 'helpdesk',
     name: 'Help Desk',
-    permissions: ['asset.read', 'asset.write', 'access_request.read'],
+    permissions: ['asset.read', 'asset.write', 'access_request.read', 'employee.read'],
   },
   {
     key: 'auditor',
     name: 'Auditor (read-only)',
     permissions: ['rbac.read', 'audit.read', 'compliance.read', 'employee.read', 'asset.read', 'reports.read'],
   },
-  { key: 'employee', name: 'Employee', permissions: [] },
+  {
+    key: 'employee',
+    name: 'Employee',
+    permissions: [], // Base role — can submit requests and view own data.
+  },
 ];
 
-// ── Baseline assignments (employee email → role key, global scope) ───────────────
-const ASSIGNMENTS: Array<{ email: string; roleKey: string }> = [
-  { email: 'admin@opshub.local', roleKey: 'admin' },
-  { email: 'nghia@opshub.local', roleKey: 'it-admin' },
-  { email: 'viewer@opshub.local', roleKey: 'employee' },
+// ── Representative employees (one per role) ───────────────────────────────────
+// roleKeys populates BOTH the JSONB `roles` column (JWT claims) AND the RBAC
+// user_role_assignments table — they must stay in sync.
+const EMPLOYEES: Array<{
+  email: string;
+  displayName: string;
+  department: string;
+  jobTitle: string;
+  roleKeys: string[];
+  status: 'active' | 'on_leave' | 'offboarded';
+}> = [
+  {
+    email: 'admin@opshub.local',
+    displayName: 'Platform Admin',
+    department: 'IT Operations',
+    jobTitle: 'Platform Administrator',
+    roleKeys: ['admin'],
+    status: 'active',
+  },
+  {
+    email: 'it.admin@opshub.local',
+    displayName: 'IT Admin',
+    department: 'IT Operations',
+    jobTitle: 'IT Systems Administrator',
+    roleKeys: ['it-admin'],
+    status: 'active',
+  },
+  {
+    email: 'security@opshub.local',
+    displayName: 'Security Officer',
+    department: 'Information Security',
+    jobTitle: 'Information Security Officer',
+    roleKeys: ['security'],
+    status: 'active',
+  },
+  {
+    email: 'hr@opshub.local',
+    displayName: 'HR Manager',
+    department: 'Human Resources',
+    jobTitle: 'HR Manager',
+    roleKeys: ['hr'],
+    status: 'active',
+  },
+  {
+    email: 'manager@opshub.local',
+    displayName: 'People Manager',
+    department: 'Engineering',
+    jobTitle: 'Engineering Manager',
+    roleKeys: ['manager'],
+    status: 'active',
+  },
+  {
+    email: 'helpdesk@opshub.local',
+    displayName: 'Help Desk Agent',
+    department: 'IT Operations',
+    jobTitle: 'IT Support Specialist',
+    roleKeys: ['helpdesk'],
+    status: 'active',
+  },
+  {
+    email: 'auditor@opshub.local',
+    displayName: 'Internal Auditor',
+    department: 'Compliance',
+    jobTitle: 'Internal Auditor',
+    roleKeys: ['auditor'],
+    status: 'active',
+  },
+  {
+    email: 'alice@opshub.local',
+    displayName: 'Alice Johnson',
+    department: 'Engineering',
+    jobTitle: 'Software Engineer',
+    roleKeys: ['employee'],
+    status: 'active',
+  },
+  {
+    email: 'bob@opshub.local',
+    displayName: 'Bob Smith',
+    department: 'Sales',
+    jobTitle: 'Account Executive',
+    roleKeys: ['employee'],
+    status: 'active',
+  },
+  {
+    email: 'carol@opshub.local',
+    displayName: 'Carol White',
+    department: 'Finance',
+    jobTitle: 'Financial Analyst',
+    roleKeys: ['employee'],
+    status: 'active',
+  },
 ];
 
 async function main(): Promise<void> {
   const connectionString = process.env['DATABASE_URL'];
-  if (!connectionString) throw new Error('DATABASE_URL is required');
+  if (!connectionString) throw new Error('DATABASE_URL env var is required');
 
   const pool = new Pool({ connectionString, max: 1 });
   const db = drizzle(pool);
 
-  // 1. Employees
-  const employeeSeeds = [
-    {
-      email: 'admin@opshub.local',
-      displayName: 'Admin User',
-      department: 'IT',
-      jobTitle: 'IT Admin',
-      roles: ['it-admin', 'security'],
-      status: 'active' as const,
-    },
-    {
-      email: 'nghia@opshub.local',
-      displayName: 'Nghia Van',
-      department: 'Engineering',
-      jobTitle: 'Senior Engineer',
-      roles: ['it-admin'],
-      status: 'active' as const,
-    },
-    {
-      email: 'viewer@opshub.local',
-      displayName: 'Viewer User',
-      department: 'Operations',
-      jobTitle: 'Ops Analyst',
-      roles: [],
-      status: 'active' as const,
-    },
-  ];
-  await db.insert(employees).values(employeeSeeds).onConflictDoNothing({ target: employees.email });
-
-  // 2. Permissions
+  // 1. Permission catalog
   await db.insert(permissions).values(PERMISSIONS).onConflictDoNothing({ target: permissions.key });
 
-  // 3. Roles (all seed roles are system-managed)
+  // 2. System roles
   await db
     .insert(roles)
     .values(ROLES.map((r) => ({ key: r.key, name: r.name, system: true })))
@@ -159,15 +230,10 @@ async function main(): Promise<void> {
   const roleRows = await db
     .select({ id: roles.id, key: roles.key })
     .from(roles)
-    .where(
-      inArray(
-        roles.key,
-        ROLES.map((r) => r.key),
-      ),
-    );
+    .where(inArray(roles.key, ROLES.map((r) => r.key)));
   const roleIdByKey = new Map(roleRows.map((r) => [r.key, r.id]));
 
-  // 4. Role → permission membership
+  // 3. Role → permission membership
   const rolePermValues = ROLES.flatMap((r) => {
     const roleId = roleIdByKey.get(r.key);
     if (!roleId) return [];
@@ -180,56 +246,71 @@ async function main(): Promise<void> {
       .onConflictDoNothing({ target: [rolePermissions.roleId, rolePermissions.permissionKey] });
   }
 
-  // 5. Baseline assignments (global scope), idempotent via existence check
+  // 4. Employees (with JSONB roles for JWT claims)
+  await db
+    .insert(employees)
+    .values(
+      EMPLOYEES.map((e) => ({
+        email: e.email,
+        displayName: e.displayName,
+        department: e.department,
+        jobTitle: e.jobTitle,
+        roles: e.roleKeys,
+        status: e.status,
+      })),
+    )
+    .onConflictDoNothing({ target: employees.email });
+
   const empRows = await db
     .select({ id: employees.id, email: employees.email })
     .from(employees)
-    .where(
-      inArray(
-        employees.email,
-        ASSIGNMENTS.map((a) => a.email),
-      ),
-    );
+    .where(inArray(employees.email, EMPLOYEES.map((e) => e.email)));
   const empIdByEmail = new Map(empRows.map((e) => [e.email, e.id]));
+
   const adminId = empIdByEmail.get('admin@opshub.local');
 
-  for (const a of ASSIGNMENTS) {
-    const userId = empIdByEmail.get(a.email);
-    const roleId = roleIdByKey.get(a.roleKey);
-    if (!userId || !roleId) continue;
+  // 5. RBAC user_role_assignments (global scope, idempotent)
+  for (const emp of EMPLOYEES) {
+    const userId = empIdByEmail.get(emp.email);
+    if (!userId) continue;
 
-    const [existing] = await db
-      .select({ id: userRoleAssignments.id })
-      .from(userRoleAssignments)
-      .where(
-        and(
-          eq(userRoleAssignments.userId, userId),
-          eq(userRoleAssignments.roleId, roleId),
-          eq(userRoleAssignments.scopeType, 'global'),
-          isNull(userRoleAssignments.scopeId),
-        ),
-      )
-      .limit(1);
-    if (existing) continue;
+    for (const roleKey of emp.roleKeys) {
+      const roleId = roleIdByKey.get(roleKey);
+      if (!roleId) continue;
 
-    await db.insert(userRoleAssignments).values({
-      userId,
-      roleId,
-      scopeType: 'global',
-      scopeId: null,
-      grantedBy: adminId ?? userId,
-    });
+      const [existing] = await db
+        .select({ id: userRoleAssignments.id })
+        .from(userRoleAssignments)
+        .where(
+          and(
+            eq(userRoleAssignments.userId, userId),
+            eq(userRoleAssignments.roleId, roleId),
+            eq(userRoleAssignments.scopeType, 'global'),
+            isNull(userRoleAssignments.scopeId),
+          ),
+        )
+        .limit(1);
+      if (existing) continue;
+
+      await db.insert(userRoleAssignments).values({
+        userId,
+        roleId,
+        scopeType: 'global',
+        scopeId: null,
+        grantedBy: adminId ?? userId,
+      });
+    }
   }
 
   // eslint-disable-next-line no-console
   console.log(
-    `✅ Seeded ${employeeSeeds.length} employees, ${PERMISSIONS.length} permissions, ${ROLES.length} roles, ${ASSIGNMENTS.length} assignments`,
+    `✅ Seeded: ${PERMISSIONS.length} permissions | ${ROLES.length} roles | ${EMPLOYEES.length} employees`,
   );
   await pool.end();
 }
 
 main().catch((err) => {
   // eslint-disable-next-line no-console
-  console.error('❌ Seed failed', err);
+  console.error('❌ Seed failed:', err);
   process.exit(1);
 });

@@ -15,6 +15,7 @@ import {
   uniqueIndex,
   primaryKey,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { scopeTypeEnum } from './enums';
 
 export const authzSchema = pgSchema('authz');
@@ -77,7 +78,16 @@ export const userRoleAssignments = authzSchema.table(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    uniq: uniqueIndex('uq_ura_user_role_scope').on(t.userId, t.roleId, t.scopeType, t.scopeId),
+    // Two partial indexes cover both cases:
+    // 1. Global assignments (scope_id IS NULL) — enforce uniqueness ignoring the NULL column.
+    // 2. Scoped assignments (scope_id IS NOT NULL) — standard composite uniqueness.
+    // This avoids the PostgreSQL NULL != NULL gotcha in unique indexes.
+    uniqGlobal: uniqueIndex('uq_ura_user_role_global')
+      .on(t.userId, t.roleId, t.scopeType)
+      .where(sql`scope_id IS NULL`),
+    uniqScoped: uniqueIndex('uq_ura_user_role_scoped')
+      .on(t.userId, t.roleId, t.scopeType, t.scopeId)
+      .where(sql`scope_id IS NOT NULL`),
     userIdx: index('ix_ura_user').on(t.userId),
   }),
 );
@@ -99,5 +109,7 @@ export const approvalDelegations = authzSchema.table(
   },
   (t) => ({
     fromActiveIdx: index('ix_deleg_from_active').on(t.fromUserId, t.endsAt),
+    // Needed by findActiveDelegationTo() — queried on every approve/reject.
+    toActiveIdx: index('ix_deleg_to_active').on(t.toUserId, t.endsAt),
   }),
 );

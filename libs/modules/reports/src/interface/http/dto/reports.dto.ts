@@ -100,6 +100,7 @@ export class ThroughputResponseDto extends createZodDto(ThroughputResponseSchema
 const FindingsSummaryItemSchema = z.object({
   severity: z.string(),
   open: z.number().int(),
+  /** Count of acknowledged / in-remediation findings. */
   inRemediation: z.number().int(),
   resolved: z.number().int(),
   total: z.number().int(),

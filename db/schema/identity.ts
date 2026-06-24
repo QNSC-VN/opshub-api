@@ -2,6 +2,7 @@
  * identity schema — employees (single-tenant directory, synced from Entra ID).
  */
 import { pgSchema, uuid, varchar, jsonb, timestamp, index, uniqueIndex, boolean } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { employeeStatusEnum } from './enums';
 
 export const identitySchema = pgSchema('identity');
@@ -25,7 +26,11 @@ export const employees = identitySchema.table(
   },
   (t) => ({
     emailIdx: uniqueIndex('uq_employee_email').on(t.email),
-    entraIdx: uniqueIndex('uq_employee_entra_oid').on(t.entraOid),
+    // Partial: only enforce uniqueness for non-null Entra OIDs.
+    // Locally-created employees (no Entra sync) may all have entra_oid = NULL.
+    entraIdx: uniqueIndex('uq_employee_entra_oid')
+      .on(t.entraOid)
+      .where(sql`entra_oid IS NOT NULL`),
     statusIdx: index('ix_employee_status').on(t.status),
   }),
 );

@@ -222,7 +222,7 @@ export class ReportsService {
         open: sql<number>`
           count(*) filter (where ${complianceFindings.status} = 'open')::int`,
         inRemediation: sql<number>`
-          count(*) filter (where ${complianceFindings.status} = 'in_remediation')::int`,
+          count(*) filter (where ${complianceFindings.status} = 'acknowledged')::int`,
         resolved: sql<number>`
           count(*) filter (where ${complianceFindings.status} = 'resolved')::int`,
         total: sql<number>`count(*)::int`,

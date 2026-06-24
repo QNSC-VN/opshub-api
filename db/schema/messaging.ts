@@ -12,6 +12,7 @@ import {
   pgSchema, uuid, varchar, text, jsonb, timestamp, boolean, integer,
   index, uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const messagingSchema = pgSchema('messaging');
 
@@ -54,7 +55,10 @@ export const notificationOutbox = messagingSchema.table(
   },
   (t) => ({
     pendingIdx:       index('ix_notif_outbox_pending').on(t.status, t.scheduledAt),
-    idempotencyIdx:   uniqueIndex('uq_notif_outbox_idempotency').on(t.idempotencyKey),
+    // Partial: only enforce idempotency when a key is provided.
+    idempotencyIdx:   uniqueIndex('uq_notif_outbox_idempotency')
+      .on(t.idempotencyKey)
+      .where(sql`idempotency_key IS NOT NULL`),
   }),
 );
 
@@ -83,6 +87,9 @@ export const emailOutbox = messagingSchema.table(
   },
   (t) => ({
     pendingIdx:     index('ix_email_outbox_pending').on(t.status, t.scheduledAt),
-    idempotencyIdx: uniqueIndex('uq_email_outbox_idempotency').on(t.idempotencyKey),
+    // Partial: only enforce idempotency when a key is provided.
+    idempotencyIdx: uniqueIndex('uq_email_outbox_idempotency')
+      .on(t.idempotencyKey)
+      .where(sql`idempotency_key IS NOT NULL`),
   }),
 );

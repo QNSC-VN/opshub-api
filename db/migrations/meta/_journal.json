@@ -5,64 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1782203994551,
-      "tag": "0000_icy_oracle",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1782216615021,
-      "tag": "0001_add_refresh_tokens",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1782217374323,
-      "tag": "0002_add_refresh_token_family_id",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1782230483264,
-      "tag": "0003_clumsy_logan",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1782233877979,
-      "tag": "0004_needy_vargas",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1782240423483,
-      "tag": "0005_great_norrin_radd",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1782242635065,
-      "tag": "0006_amused_skullbuster",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1782276079155,
-      "tag": "0007_futuristic_the_captain",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1782277245820,
-      "tag": "0008_lucky_silver_centurion",
+      "when": 1782279247910,
+      "tag": "0000_gifted_doomsday",
       "breakpoints": true
     }
   ]

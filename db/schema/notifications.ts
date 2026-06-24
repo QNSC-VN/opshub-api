@@ -7,6 +7,7 @@
 import {
   pgSchema, uuid, varchar, text, boolean, jsonb, timestamp, index, uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const notificationsSchema = pgSchema('notifications');
 
@@ -33,7 +34,10 @@ export const inAppNotifications = notificationsSchema.table(
     recipientIdx:   index('ix_ian_recipient').on(t.recipientId, t.isRead),
     createdIdx:     index('ix_ian_created').on(t.recipientId, t.createdAt),
     resourceIdx:    index('ix_ian_resource').on(t.resourceType, t.resourceId),
-    sourceEventIdx: uniqueIndex('uq_ian_source_event_id').on(t.sourceEventId),
+    // Partial: only deduplicate when an outbox source event ID is present.
+    sourceEventIdx: uniqueIndex('uq_ian_source_event_id')
+      .on(t.sourceEventId)
+      .where(sql`source_event_id IS NOT NULL`),
   }),
 );
 
