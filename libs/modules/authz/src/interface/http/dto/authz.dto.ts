@@ -25,7 +25,11 @@ export const AssignRoleSchema = z.object({
   roleId: z.string().uuid(),
   scopeType: ScopeTypeSchema.default('global'),
   scopeId: z.string().max(120).nullable().optional(),
-  expiresAt: z.coerce.date().nullable().optional(),
+  expiresAt: z
+    .string()
+    .datetime({ offset: true })
+    .nullish()
+    .transform((v) => (v != null ? new Date(v) : null)),
 });
 export class AssignRoleDto extends createZodDto(AssignRoleSchema) {}
 
@@ -58,8 +62,8 @@ export class RoleAssignmentResponseDto {
 
 export const CreateDelegationSchema = z.object({
   toUserId: z.string().uuid(),
-  startsAt: z.coerce.date(),
-  endsAt: z.coerce.date(),
+  startsAt: z.string().datetime({ offset: true }).transform((v) => new Date(v)),
+  endsAt: z.string().datetime({ offset: true }).transform((v) => new Date(v)),
   reason: z.string().max(500).optional(),
 });
 export class CreateDelegationDto extends createZodDto(CreateDelegationSchema) {}

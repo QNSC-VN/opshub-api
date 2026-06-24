@@ -6,7 +6,6 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
-import { sql } from 'drizzle-orm';
 
 async function main(): Promise<void> {
   const connectionString = process.env['DATABASE_URL'];
@@ -15,11 +14,9 @@ async function main(): Promise<void> {
   const pool = new Pool({ connectionString, max: 1 });
   const db = drizzle(pool);
 
-  // Ensure schemas exist before applying table migrations.
-  for (const schema of ['identity', 'authz', 'requests', 'assets', 'access', 'compliance', 'workforce', 'audit', 'messaging']) {
-    await db.execute(sql.raw(`CREATE SCHEMA IF NOT EXISTS ${schema}`));
-  }
-
+  // Drizzle migration owns the full DDL lifecycle (CREATE SCHEMA, CREATE TYPE,
+  // CREATE TABLE, indexes, FKs). Do NOT pre-create schemas here — that would
+  // cause the migration to fail with "schema already exists".
   await migrate(db, { migrationsFolder: './db/migrations' });
   // eslint-disable-next-line no-console
   console.log('✅ Migrations applied');
