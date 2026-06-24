@@ -25,6 +25,7 @@ import { AuditModule } from '@modules/audit';
 import { NotificationsModule } from '@modules/notifications';
 import { RequestsModule } from '@modules/requests';
 import { ReportsModule } from '@modules/reports';
+import { WebhooksModule } from '@modules/webhooks';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { ReportsModule } from '@modules/reports';
     WorkforceModule,
     RequestsModule,
     ReportsModule,
+    WebhooksModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },

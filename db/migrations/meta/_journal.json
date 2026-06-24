@@ -8,6 +8,13 @@
       "when": 1782279247910,
       "tag": "0000_gifted_doomsday",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782283828545,
+      "tag": "0001_brave_wilson_fisk",
+      "breakpoints": true
     }
   ]
 }

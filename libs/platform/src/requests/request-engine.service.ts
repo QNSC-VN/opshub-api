@@ -10,6 +10,7 @@ import {
   ConflictException,
 } from '../errors/exceptions';
 import { OutboxService } from '../outbox/outbox.service';
+import { WebhookEnqueueService } from '../webhooks/webhook-enqueue.service';
 import { requestItems, requestApprovals, requestComments } from '../../../../db/schema';
 import { RequestRegistry } from './request-registry';
 import { DelegationService } from '../authz/delegation.service';
@@ -49,6 +50,7 @@ export class RequestEngine {
     private readonly outbox: OutboxService,
     private readonly delegation: DelegationService,
     private readonly notifScheduler: NotificationSchedulerService,
+    private readonly webhookEnqueue: WebhookEnqueueService,
   ) {}
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -98,12 +100,9 @@ export class RequestEngine {
         })
         .returning();
 
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'request',
-        aggregateId: row.id,
-        eventType: `request.submitted`,
-        payload: { requestId: row.id, type, requesterId: actor.sub, priority: row.priority },
-      });
+      const submitPayload = { requestId: row.id, type, requesterId: actor.sub, priority: row.priority };
+      await this.outbox.enqueue(tx, { aggregateType: 'request', aggregateId: row.id, eventType: 'request.submitted', payload: submitPayload });
+      await this.webhookEnqueue.fanout(tx, 'request.submitted', submitPayload);
 
       return row;
     });
@@ -220,19 +219,10 @@ export class RequestEngine {
         }
       }
 
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'request',
-        aggregateId: requestId,
-        eventType: isFinalStep ? 'request.approved' : 'request.step_approved',
-        payload: {
-          requestId,
-          type: request.type,
-          approverId: actor.sub,
-          step: currentStep,
-          isFinalStep,
-          totalSteps: maxStep,
-        },
-      });
+      const approvalEventType = isFinalStep ? 'request.approved' : 'request.step_approved';
+      const approvalPayload = { requestId, type: request.type, approverId: actor.sub, step: currentStep, isFinalStep, totalSteps: maxStep };
+      await this.outbox.enqueue(tx, { aggregateType: 'request', aggregateId: requestId, eventType: approvalEventType, payload: approvalPayload });
+      await this.webhookEnqueue.fanout(tx, approvalEventType, approvalPayload);
 
       return row;
     });
@@ -299,12 +289,9 @@ export class RequestEngine {
         await def.onReject(request.payload, requestId, actor.sub, tx);
       }
 
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'request',
-        aggregateId: requestId,
-        eventType: 'request.rejected',
-        payload: { requestId, type: request.type, approverId: actor.sub, note },
-      });
+      const rejectedPayload = { requestId, type: request.type, approverId: actor.sub, note };
+      await this.outbox.enqueue(tx, { aggregateType: 'request', aggregateId: requestId, eventType: 'request.rejected', payload: rejectedPayload });
+      await this.webhookEnqueue.fanout(tx, 'request.rejected', rejectedPayload);
 
       return row;
     });
@@ -345,12 +332,9 @@ export class RequestEngine {
         await def.onCancel(request.payload, requestId, actor.sub, tx);
       }
 
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'request',
-        aggregateId: requestId,
-        eventType: 'request.cancelled',
-        payload: { requestId, type: request.type, cancelledBy: actor.sub },
-      });
+      const cancelledPayload = { requestId, type: request.type, cancelledBy: actor.sub };
+      await this.outbox.enqueue(tx, { aggregateType: 'request', aggregateId: requestId, eventType: 'request.cancelled', payload: cancelledPayload });
+      await this.webhookEnqueue.fanout(tx, 'request.cancelled', cancelledPayload);
 
       return row;
     });
@@ -377,12 +361,9 @@ export class RequestEngine {
         await def.onExpire(request.payload, requestId, tx);
       }
 
-      await this.outbox.enqueue(tx, {
-        aggregateType: 'request',
-        aggregateId: requestId,
-        eventType: 'request.expired',
-        payload: { requestId, type: request.type },
-      });
+      const expiredPayload = { requestId, type: request.type };
+      await this.outbox.enqueue(tx, { aggregateType: 'request', aggregateId: requestId, eventType: 'request.expired', payload: expiredPayload });
+      await this.webhookEnqueue.fanout(tx, 'request.expired', expiredPayload);
     });
 
     this.logger.log({ requestId, type: request.type }, 'Request expired');

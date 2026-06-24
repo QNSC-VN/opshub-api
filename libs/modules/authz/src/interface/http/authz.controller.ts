@@ -14,6 +14,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiCommonErrors, CurrentUser, RequirePermission } from '@platform';
 import type { JwtPayload, Permission, RoleAssignment, RoleWithPermissions } from '@platform';
 import { DelegationService, type ApprovalDelegation } from '@platform';
+import { AuditService } from '@modules/audit';
 import { AuthzAdminService } from '../../application/authz-admin.service';
 import {
   AssignRoleDto,
@@ -69,6 +70,7 @@ export class AuthzController {
   constructor(
     private readonly authz: AuthzAdminService,
     private readonly delegation: DelegationService,
+    private readonly audit: AuditService,
   ) {}
 
   @Get('permissions')
@@ -104,6 +106,14 @@ export class AuthzController {
     @CurrentUser() user: JwtPayload,
   ): Promise<RoleResponseDto> {
     const role = await this.authz.createRole(dto, { sub: user.sub, email: user.email });
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'rbac.role_created',
+      resourceType: 'role',
+      resourceId: role.id,
+      metadata: { key: role.key, name: role.name },
+    });
     return toRoleDto(role);
   }
 
@@ -120,6 +130,14 @@ export class AuthzController {
       sub: user.sub,
       email: user.email,
     });
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'rbac.role_permissions_updated',
+      resourceType: 'role',
+      resourceId: id,
+      metadata: { permissions: dto.permissions },
+    });
     return toRoleDto(role);
   }
 
@@ -130,6 +148,13 @@ export class AuthzController {
   @ApiCommonErrors(401, 403, 404, 422)
   async deleteRole(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
     await this.authz.deleteRole(id, { sub: user.sub, email: user.email });
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'rbac.role_deleted',
+      resourceType: 'role',
+      resourceId: id,
+    });
   }
 
   @Get('users/:userId/assignments')
@@ -160,6 +185,14 @@ export class AuthzController {
       },
       { sub: user.sub, email: user.email },
     );
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'rbac.role_assigned',
+      resourceType: 'role_assignment',
+      resourceId: assignment.id,
+      metadata: { userId: dto.userId, roleId: dto.roleId, scopeType: dto.scopeType, scopeId: dto.scopeId ?? null },
+    });
     return toAssignmentDto(assignment);
   }
 
@@ -173,6 +206,13 @@ export class AuthzController {
     @CurrentUser() user: JwtPayload,
   ): Promise<void> {
     await this.authz.revokeAssignment(id, { sub: user.sub, email: user.email });
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'rbac.role_assignment_revoked',
+      resourceType: 'role_assignment',
+      resourceId: id,
+    });
   }
 
   // ── Approval Delegation ────────────────────────────────────────────────────
@@ -195,6 +235,14 @@ export class AuthzController {
       startsAt: dto.startsAt,
       endsAt: dto.endsAt,
       reason: dto.reason,
+    });
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'rbac.delegation_created',
+      resourceType: 'delegation',
+      resourceId: d.id,
+      metadata: { toUserId: dto.toUserId, startsAt: dto.startsAt, endsAt: dto.endsAt },
     });
     return toDelegationDto(d);
   }
@@ -227,5 +275,12 @@ export class AuthzController {
     @CurrentUser() user: JwtPayload,
   ): Promise<void> {
     await this.delegation.revoke(id, user.sub);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'rbac.delegation_revoked',
+      resourceType: 'delegation',
+      resourceId: id,
+    });
   }
 }

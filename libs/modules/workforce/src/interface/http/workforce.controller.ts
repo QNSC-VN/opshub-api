@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
+import { EmployeeService } from '@modules/identity';
+import { AuditService } from '@modules/audit';
 import { WorkforceService } from '../../application/workforce.service';
 import {
   CreateTimesheetDto,
@@ -17,6 +19,10 @@ import {
   ListShiftLogsQueryDto,
   ShiftLogResponseDto,
   ReviewDto,
+  SubmitOnboardingDto,
+  OnboardingResponseDto,
+  SubmitOffboardingDto,
+  OffboardingResponseDto,
 } from './dto/workforce.dto';
 import type {
   LeaveRequest,
@@ -83,7 +89,11 @@ function toShiftLogDto(s: ShiftLog): ShiftLogResponseDto {
 @ApiTags('workforce')
 @Controller('workforce')
 export class WorkforceController {
-  constructor(private readonly service: WorkforceService) {}
+  constructor(
+    private readonly service: WorkforceService,
+    private readonly audit: AuditService,
+    private readonly employeeService: EmployeeService,
+  ) {}
 
   // ── Timesheets ─────────────────────────────────────────────────────────────
   @Get('timesheets')
@@ -110,7 +120,16 @@ export class WorkforceController {
     @Body() dto: CreateTimesheetDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<TimesheetResponseDto> {
-    return toTimesheetDto(await this.service.createTimesheet(dto, user));
+    const ts = await this.service.createTimesheet(dto, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'workforce.timesheet_created',
+      resourceType: 'timesheet',
+      resourceId: ts.id,
+      metadata: { workDate: dto.workDate, minutesWorked: dto.minutesWorked },
+    });
+    return toTimesheetDto(ts);
   }
 
   @Post('timesheets/:id/submit')
@@ -121,7 +140,15 @@ export class WorkforceController {
     @Param('id') id: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<TimesheetResponseDto> {
-    return toTimesheetDto(await this.service.submitTimesheet(id, user));
+    const ts = await this.service.submitTimesheet(id, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'workforce.timesheet_submitted',
+      resourceType: 'timesheet',
+      resourceId: id,
+    });
+    return toTimesheetDto(ts);
   }
 
   @Post('timesheets/:id/review')
@@ -133,7 +160,15 @@ export class WorkforceController {
     @Body() dto: ReviewDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<TimesheetResponseDto> {
-    return toTimesheetDto(await this.service.reviewTimesheet(id, dto.approve, user));
+    const ts = await this.service.reviewTimesheet(id, dto.approve, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: dto.approve ? 'workforce.timesheet_approved' : 'workforce.timesheet_rejected',
+      resourceType: 'timesheet',
+      resourceId: id,
+    });
+    return toTimesheetDto(ts);
   }
 
   // ── Leave ──────────────────────────────────────────────────────────────────
@@ -159,7 +194,16 @@ export class WorkforceController {
     @Body() dto: CreateLeaveDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<LeaveResponseDto> {
-    return toLeaveDto(await this.service.createLeave(dto, user));
+    const leave = await this.service.createLeave(dto, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'workforce.leave_requested',
+      resourceType: 'leave_request',
+      resourceId: leave.id,
+      metadata: { leaveType: dto.leaveType, startDate: dto.startDate, endDate: dto.endDate },
+    });
+    return toLeaveDto(leave);
   }
 
   @Post('leave/:id/review')
@@ -171,7 +215,15 @@ export class WorkforceController {
     @Body() dto: ReviewDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<LeaveResponseDto> {
-    return toLeaveDto(await this.service.reviewLeave(id, dto.approve, user));
+    const leave = await this.service.reviewLeave(id, dto.approve, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: dto.approve ? 'workforce.leave_approved' : 'workforce.leave_rejected',
+      resourceType: 'leave_request',
+      resourceId: id,
+    });
+    return toLeaveDto(leave);
   }
 
   @Post('leave/:id/cancel')
@@ -182,7 +234,15 @@ export class WorkforceController {
     @Param('id') id: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<LeaveResponseDto> {
-    return toLeaveDto(await this.service.cancelLeave(id, user));
+    const leave = await this.service.cancelLeave(id, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'workforce.leave_cancelled',
+      resourceType: 'leave_request',
+      resourceId: id,
+    });
+    return toLeaveDto(leave);
   }
 
   // ── Overtime ───────────────────────────────────────────────────────────────
@@ -210,7 +270,16 @@ export class WorkforceController {
     @Body() dto: CreateOvertimeDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<OvertimeResponseDto> {
-    return toOvertimeDto(await this.service.createOvertime(dto, user));
+    const entry = await this.service.createOvertime(dto, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'workforce.overtime_logged',
+      resourceType: 'overtime_entry',
+      resourceId: entry.id,
+      metadata: { workDate: dto.workDate, hours: dto.hours },
+    });
+    return toOvertimeDto(entry);
   }
 
   @Post('overtime/:id/review')
@@ -222,7 +291,15 @@ export class WorkforceController {
     @Body() dto: ReviewDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<OvertimeResponseDto> {
-    return toOvertimeDto(await this.service.reviewOvertime(id, dto.approve, user));
+    const entry = await this.service.reviewOvertime(id, dto.approve, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: dto.approve ? 'workforce.overtime_approved' : 'workforce.overtime_rejected',
+      resourceType: 'overtime_entry',
+      resourceId: id,
+    });
+    return toOvertimeDto(entry);
   }
 
   // ── Shift logs ─────────────────────────────────────────────────────────────
@@ -250,11 +327,66 @@ export class WorkforceController {
     @Body() dto: CreateShiftLogDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<ShiftLogResponseDto> {
-    return toShiftLogDto(
-      await this.service.createShiftLog(
-        { ...dto, startsAt: new Date(dto.startsAt), endsAt: new Date(dto.endsAt) },
-        user,
-      ),
+    const shift = await this.service.createShiftLog(
+      { ...dto, startsAt: new Date(dto.startsAt), endsAt: new Date(dto.endsAt) },
+      user,
     );
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'workforce.shift_logged',
+      resourceType: 'shift_log',
+      resourceId: shift.id,
+      metadata: { shiftType: dto.shiftType, startsAt: dto.startsAt, endsAt: dto.endsAt },
+    });
+    return toShiftLogDto(shift);
+  }
+
+  // ── Onboarding ─────────────────────────────────────────────────────────────
+
+  @Post('onboarding')
+  @Auth('onboarding.approve')
+  @ApiOperation({ summary: 'Submit a 3-step onboarding request for a new employee' })
+  @ApiResponse({ status: 201, type: OnboardingResponseDto })
+  @ApiCommonErrors(400, 401, 403, 404)
+  async submitOnboarding(
+    @Body() dto: SubmitOnboardingDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<OnboardingResponseDto> {
+    const employee = await this.employeeService.getById(dto.employeeId);
+    const requestId = await this.service.submitOnboarding(
+      {
+        employeeId: employee.id,
+        employeeEmail: employee.email,
+        startDate: dto.startDate,
+        department: dto.department,
+        jobTitle: dto.jobTitle,
+      },
+      user,
+    );
+    return { requestId };
+  }
+
+  // ── Offboarding ────────────────────────────────────────────────────────────
+
+  @Post('offboarding')
+  @Auth('offboarding.approve')
+  @ApiOperation({ summary: 'Submit an offboarding request — revokes all access on approval' })
+  @ApiResponse({ status: 201, type: OffboardingResponseDto })
+  @ApiCommonErrors(400, 401, 403, 404)
+  async submitOffboarding(
+    @Body() dto: SubmitOffboardingDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<OffboardingResponseDto> {
+    const employee = await this.employeeService.getById(dto.employeeId);
+    const requestId = await this.service.submitOffboarding(
+      {
+        employeeId: employee.id,
+        employeeEmail: employee.email,
+        reason: dto.reason,
+      },
+      user,
+    );
+    return { requestId };
   }
 }

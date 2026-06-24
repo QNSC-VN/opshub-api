@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
+import { AuditService } from '@modules/audit';
 import { ComplianceService } from '../../application/compliance.service';
 import {
   AddSoftwareDto,
@@ -46,7 +47,10 @@ function toFindingDto(f: ComplianceFinding): FindingResponseDto {
 @ApiTags('compliance')
 @Controller('compliance')
 export class ComplianceController {
-  constructor(private readonly service: ComplianceService) {}
+  constructor(
+    private readonly service: ComplianceService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ── Software catalog ───────────────────────────────────────────────────────
 
@@ -82,7 +86,16 @@ export class ComplianceController {
     @Body() dto: AddSoftwareDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<SoftwareResponseDto> {
-    return toSoftwareDto(await this.service.addSoftware(dto, user));
+    const entry = await this.service.addSoftware(dto, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'compliance.software_added',
+      resourceType: 'software_catalog',
+      resourceId: entry.id,
+      metadata: { name: entry.name, listing: entry.listing },
+    });
+    return toSoftwareDto(entry);
   }
 
   @Patch('software/:id')
@@ -94,7 +107,16 @@ export class ComplianceController {
     @Body() dto: UpdateSoftwareDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<SoftwareResponseDto> {
-    return toSoftwareDto(await this.service.updateSoftware(id, dto, user));
+    const entry = await this.service.updateSoftware(id, dto, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'compliance.software_updated',
+      resourceType: 'software_catalog',
+      resourceId: id,
+      metadata: { changes: dto as Record<string, unknown> },
+    });
+    return toSoftwareDto(entry);
   }
 
   // ── Findings ───────────────────────────────────────────────────────────────
@@ -136,7 +158,15 @@ export class ComplianceController {
     @Param('id') id: string,
     @CurrentUser() user: JwtPayload,
   ): Promise<FindingResponseDto> {
-    return toFindingDto(await this.service.acknowledgeFinding(id, user));
+    const finding = await this.service.acknowledgeFinding(id, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'compliance.finding_acknowledged',
+      resourceType: 'compliance_finding',
+      resourceId: id,
+    });
+    return toFindingDto(finding);
   }
 
   @Post('findings/:id/resolve')
@@ -148,8 +178,15 @@ export class ComplianceController {
     @Body() dto: ResolveFindingDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<FindingResponseDto> {
-    return toFindingDto(
-      await this.service.resolveFinding(id, dto.note ?? null, dto.riskAccepted, user),
-    );
+    const finding = await this.service.resolveFinding(id, dto.note ?? null, dto.riskAccepted, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'compliance.finding_resolved',
+      resourceType: 'compliance_finding',
+      resourceId: id,
+      metadata: { riskAccepted: dto.riskAccepted, note: dto.note ?? null },
+    });
+    return toFindingDto(finding);
   }
 }

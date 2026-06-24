@@ -129,3 +129,33 @@ export class ShiftLogResponseDto {
 // ── Review ───────────────────────────────────────────────────────────────────
 export const ReviewSchema = z.object({ approve: z.boolean() });
 export class ReviewDto extends createZodDto(ReviewSchema) {}
+
+// ── Onboarding ───────────────────────────────────────────────────────────────
+export const SubmitOnboardingSchema = z.object({
+  /** UUID of the employee being onboarded. */
+  employeeId: z.string().uuid(),
+  /** Planned start date (YYYY-MM-DD). */
+  startDate: dateStr,
+  department: z.string().max(120).optional(),
+  jobTitle: z.string().max(120).optional(),
+});
+export class SubmitOnboardingDto extends createZodDto(SubmitOnboardingSchema) {}
+
+export class OnboardingResponseDto {
+  /** Engine request ID — use this to track approval progress. */
+  requestId!: string;
+}
+
+// ── Offboarding ───────────────────────────────────────────────────────────────
+export const SubmitOffboardingSchema = z.object({
+  /** UUID of the employee being offboarded. */
+  employeeId: z.string().uuid(),
+  /** Optional reason / business justification. */
+  reason: z.string().max(1000).optional(),
+});
+export class SubmitOffboardingDto extends createZodDto(SubmitOffboardingSchema) {}
+
+export class OffboardingResponseDto {
+  /** Engine request ID — use this to track approval progress. */
+  requestId!: string;
+}

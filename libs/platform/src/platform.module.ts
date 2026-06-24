@@ -27,6 +27,7 @@ import { EmailSchedulerService } from './email/email-scheduler.service';
 import { NotificationSchedulerService } from './notifications/notification-scheduler.service';
 import { NotificationPubSubService } from './notifications/notification-pubsub.service';
 import { DelegationService } from './authz/delegation.service';
+import { WebhookEnqueueService } from './webhooks/webhook-enqueue.service';
 
 /**
  * Platform module — cross-cutting infrastructure shared by every bounded context:
@@ -93,6 +94,7 @@ import { DelegationService } from './authz/delegation.service';
     NotificationSchedulerService,
     NotificationPubSubService,
     DelegationService,
+    WebhookEnqueueService,
   ],
   exports: [
     AppConfigModule,
@@ -115,6 +117,7 @@ import { DelegationService } from './authz/delegation.service';
     NotificationSchedulerService,
     NotificationPubSubService,
     DelegationService,
+    WebhookEnqueueService,
   ],
 })
 export class PlatformModule {}

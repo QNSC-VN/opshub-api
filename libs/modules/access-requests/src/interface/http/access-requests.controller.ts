@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
+import { AuditService } from '@modules/audit';
 import { AccessRequestService } from '../../application/access-request.service';
 import {
   SubmitAccessRequestDto,
@@ -44,7 +45,10 @@ function toGrantDto(g: AccessGrant): AccessGrantResponseDto {
 @ApiTags('access-requests')
 @Controller('access-requests')
 export class AccessRequestsController {
-  constructor(private readonly service: AccessRequestService) {}
+  constructor(
+    private readonly service: AccessRequestService,
+    private readonly audit: AuditService,
+  ) {}
 
   @Get()
   @Auth()
@@ -78,7 +82,16 @@ export class AccessRequestsController {
     @Body() dto: SubmitAccessRequestDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<AccessRequestResponseDto> {
-    return toDto(await this.service.submit(dto, user));
+    const result = await this.service.submit(dto, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'access_request.submitted',
+      resourceType: 'access_request',
+      resourceId: result.id,
+      metadata: { accessType: dto.accessType, target: dto.target, durationHours: dto.durationHours },
+    });
+    return toDto(result);
   }
 
   @Post(':id/approve')
@@ -90,7 +103,16 @@ export class AccessRequestsController {
     @Body() dto: ReviewAccessRequestDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<AccessGrantResponseDto> {
-    return toGrantDto(await this.service.approve(id, dto.note ?? null, user));
+    const grant = await this.service.approve(id, dto.note ?? null, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'access_request.approved',
+      resourceType: 'access_request',
+      resourceId: id,
+      metadata: { grantId: grant.id, note: dto.note ?? null },
+    });
+    return toGrantDto(grant);
   }
 
   @Post(':id/reject')
@@ -102,7 +124,16 @@ export class AccessRequestsController {
     @Body() dto: ReviewAccessRequestDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<AccessRequestResponseDto> {
-    return toDto(await this.service.reject(id, dto.note ?? null, user));
+    const result = await this.service.reject(id, dto.note ?? null, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'access_request.rejected',
+      resourceType: 'access_request',
+      resourceId: id,
+      metadata: { note: dto.note ?? null },
+    });
+    return toDto(result);
   }
 
   @Post('grants/:grantId/revoke')
@@ -114,6 +145,13 @@ export class AccessRequestsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<{ status: string }> {
     await this.service.revokeGrant(grantId, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'access_request.grant_revoked',
+      resourceType: 'access_grant',
+      resourceId: grantId,
+    });
     return { status: 'revoked' };
   }
 

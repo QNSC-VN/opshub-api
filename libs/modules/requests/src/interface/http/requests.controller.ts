@@ -12,6 +12,7 @@ import {
   type RequestItemWithApprovals,
   type RequestComment,
 } from '@platform';
+import { AuditService } from '@modules/audit';
 import {
   ListRequestsQueryDto,
   ReviewRequestDto,
@@ -72,7 +73,10 @@ function toCommentDto(c: RequestComment): RequestCommentResponseDto {
 @ApiTags('requests')
 @Controller('requests')
 export class RequestsController {
-  constructor(private readonly engine: RequestEngine) {}
+  constructor(
+    private readonly engine: RequestEngine,
+    private readonly audit: AuditService,
+  ) {}
 
   private async mustGetById(id: string): Promise<RequestItemWithApprovals> {
     const item = await this.engine.getById(id);
@@ -129,6 +133,14 @@ export class RequestsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<RequestItemResponseDto> {
     await this.engine.approve(id, dto.note ?? null, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'request.approved',
+      resourceType: 'request',
+      resourceId: id,
+      metadata: { note: dto.note ?? null },
+    });
     return toDto(await this.mustGetById(id));
   }
 
@@ -142,6 +154,14 @@ export class RequestsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<RequestItemResponseDto> {
     await this.engine.reject(id, dto.note ?? null, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'request.rejected',
+      resourceType: 'request',
+      resourceId: id,
+      metadata: { note: dto.note ?? null },
+    });
     return toDto(await this.mustGetById(id));
   }
 
@@ -155,6 +175,13 @@ export class RequestsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<RequestItemResponseDto> {
     await this.engine.cancel(id, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'request.cancelled',
+      resourceType: 'request',
+      resourceId: id,
+    });
     return toDto(await this.mustGetById(id));
   }
 
@@ -187,6 +214,14 @@ export class RequestsController {
     @CurrentUser() user: JwtPayload,
   ): Promise<RequestCommentResponseDto> {
     const comment = await this.engine.addComment(id, dto.body, user);
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'request.comment_added',
+      resourceType: 'request',
+      resourceId: id,
+      metadata: { commentId: comment.id },
+    });
     return toCommentDto(comment);
   }
 }

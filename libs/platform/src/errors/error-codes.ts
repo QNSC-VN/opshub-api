@@ -73,6 +73,10 @@ export const ErrorCodes = {
   DELEGATION_SELF: 'DELEGATION_SELF',
   DELEGATION_INVALID_WINDOW: 'DELEGATION_INVALID_WINDOW',
   DELEGATION_NOT_OWNER: 'DELEGATION_NOT_OWNER',
+
+  // Outbound Webhooks
+  WEBHOOK_NOT_FOUND: 'WEBHOOK_NOT_FOUND',
+  DELIVERY_NOT_FOUND: 'DELIVERY_NOT_FOUND',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

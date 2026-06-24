@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Auth, ApiCommonErrors, ApiPagedResponse, CurrentUser, buildPageResult } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
+import { AuditService } from '@modules/audit';
 import { EmployeeService } from '../../application/employee.service';
 import {
   CreateEmployeeDto,
@@ -29,7 +30,10 @@ function toDto(e: Employee): EmployeeResponseDto {
 @ApiTags('employees')
 @Controller('employees')
 export class EmployeesController {
-  constructor(private readonly employeeService: EmployeeService) {}
+  constructor(
+    private readonly employeeService: EmployeeService,
+    private readonly audit: AuditService,
+  ) {}
 
   @Get()
   @Auth()
@@ -61,7 +65,16 @@ export class EmployeesController {
     @Body() dto: CreateEmployeeDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<EmployeeResponseDto> {
-    return toDto(await this.employeeService.create(dto, { sub: user.sub, email: user.email }));
+    const employee = await this.employeeService.create(dto, { sub: user.sub, email: user.email });
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'employee.created',
+      resourceType: 'employee',
+      resourceId: employee.id,
+      metadata: { email: employee.email, department: employee.department },
+    });
+    return toDto(employee);
   }
 
   @Patch(':id')
@@ -73,7 +86,16 @@ export class EmployeesController {
     @Body() dto: UpdateEmployeeDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<EmployeeResponseDto> {
-    return toDto(await this.employeeService.update(id, dto, { sub: user.sub, email: user.email }));
+    const employee = await this.employeeService.update(id, dto, { sub: user.sub, email: user.email });
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'employee.updated',
+      resourceType: 'employee',
+      resourceId: id,
+      metadata: { changes: dto as Record<string, unknown> },
+    });
+    return toDto(employee);
   }
 
   @Patch(':id/status')
@@ -85,6 +107,15 @@ export class EmployeesController {
     @Body() dto: UpdateStatusDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<EmployeeResponseDto> {
-    return toDto(await this.employeeService.updateStatus(id, dto.status as EmployeeStatus, { sub: user.sub, email: user.email }));
+    const employee = await this.employeeService.updateStatus(id, dto.status as EmployeeStatus, { sub: user.sub, email: user.email });
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'employee.status_changed',
+      resourceType: 'employee',
+      resourceId: id,
+      metadata: { status: dto.status },
+    });
+    return toDto(employee);
   }
 }

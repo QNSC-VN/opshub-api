@@ -43,12 +43,19 @@ const PERMISSIONS: Array<{ key: string; description: string }> = [
   // Workforce
   { key: 'workforce.read',    description: 'View timesheets, leave and overtime entries' },
   { key: 'workforce.approve', description: 'Approve or reject leave and overtime requests' },
+  // Onboarding / Offboarding workflows
+  { key: 'onboarding.approve',   description: 'Step-1: Manager approves new employee hire' },
+  { key: 'onboarding.provision', description: 'Step-2: IT provisions accounts and equipment' },
+  { key: 'onboarding.complete',  description: 'Step-3: HR marks onboarding complete' },
+  { key: 'offboarding.approve',  description: 'HR approves offboarding and triggers full access revocation' },
   // Audit
   { key: 'audit.read', description: 'Read the immutable audit log' },
   // Reports
   { key: 'reports.read', description: 'View aggregate reports and analytics dashboards' },
   // Notifications
   { key: 'notifications.manage', description: 'Manage notification preferences for all users' },
+  // Outbound Webhooks
+  { key: 'webhooks.manage', description: 'Create and manage outbound webhook subscriptions' },
 ];
 
 // ── System roles → permission bundles ────────────────────────────────────────
@@ -69,6 +76,8 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
       'audit.read',
       'reports.read',
       'rbac.read',
+      'onboarding.provision',
+      'webhooks.manage',
     ],
   },
   {
@@ -89,6 +98,7 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
       'workforce.read', 'workforce.approve',
       'audit.read',
       'reports.read',
+      'onboarding.approve', 'onboarding.complete', 'offboarding.approve',
     ],
   },
   {
@@ -99,6 +109,7 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
       'workforce.read', 'workforce.approve',
       'access_request.read', 'access_request.approve',
       'reports.read',
+      'onboarding.approve',
     ],
   },
   {

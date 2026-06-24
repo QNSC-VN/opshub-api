@@ -27,6 +27,8 @@ import type {
 } from '../domain/workforce.types';
 import type { LeaveRequestPayload } from './leave-request.type-def';
 import type { OvertimePayload } from './overtime.type-def';
+import type { OnboardingPayload } from './onboarding.type-def';
+import type { OffboardingPayload } from './offboarding.type-def';
 
 type Actor = { sub: string; email: string };
 
@@ -294,5 +296,63 @@ export class WorkforceService {
     offset: number,
   ): Promise<{ rows: ShiftLog[]; total: number }> {
     return this.repo.listShiftLogs(filters, limit, offset);
+  }
+
+  // ── Onboarding ─────────────────────────────────────────────────────────────
+
+  /**
+   * Submit a multi-step onboarding request for a new employee.
+   * Steps: manager approve → IT provision → HR complete.
+   * Returns the engine request ID so the caller can track progress.
+   */
+  async submitOnboarding(
+    input: { employeeId: string; employeeEmail: string; startDate: string; department?: string; jobTitle?: string },
+    actor: Actor,
+  ): Promise<string> {
+    const payload: OnboardingPayload = {
+      employeeId: input.employeeId,
+      employeeEmail: input.employeeEmail,
+      startDate: input.startDate,
+      ...(input.department && { department: input.department }),
+      ...(input.jobTitle && { jobTitle: input.jobTitle }),
+    };
+    const item = await this.engine.submit('onboarding', payload, actor);
+    await this.audit.record({
+      actorId: actor.sub,
+      actorEmail: actor.email,
+      action: 'workforce.onboarding_submitted',
+      resourceType: 'employee',
+      resourceId: input.employeeId,
+      metadata: { requestId: item.id, startDate: input.startDate },
+    });
+    return item.id;
+  }
+
+  // ── Offboarding ────────────────────────────────────────────────────────────
+
+  /**
+   * Submit an offboarding request for an employee.
+   * On approval: status → offboarded, roles revoked, grants revoked,
+   * assets returned, sessions invalidated — all atomically.
+   */
+  async submitOffboarding(
+    input: { employeeId: string; employeeEmail: string; reason?: string },
+    actor: Actor,
+  ): Promise<string> {
+    const payload: OffboardingPayload = {
+      employeeId: input.employeeId,
+      employeeEmail: input.employeeEmail,
+      ...(input.reason && { reason: input.reason }),
+    };
+    const item = await this.engine.submit('offboarding', payload, actor);
+    await this.audit.record({
+      actorId: actor.sub,
+      actorEmail: actor.email,
+      action: 'workforce.offboarding_submitted',
+      resourceType: 'employee',
+      resourceId: input.employeeId,
+      metadata: { requestId: item.id, reason: input.reason },
+    });
+    return item.id;
   }
 }

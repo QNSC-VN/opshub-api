@@ -93,3 +93,50 @@ export const emailOutbox = messagingSchema.table(
       .where(sql`idempotency_key IS NOT NULL`),
   }),
 );
+
+// ── Webhook subscriptions ─────────────────────────────────────────────────────
+//
+// External systems register a URL + secret + list of event types they want
+// to receive.  The delivery outbox (below) fans out a row per subscription
+// each time a matching domain event fires.
+
+export const webhookSubscriptions = messagingSchema.table(
+  'webhook_subscriptions',
+  {
+    id:          uuid('id').primaryKey().defaultRandom(),
+    url:         varchar('url', { length: 2048 }).notNull(),
+    /** HMAC-SHA256 signing secret.  Never returned in GET responses. */
+    secret:      varchar('secret', { length: 255 }).notNull(),
+    /** Domain event types this subscription listens to, e.g. ['request.approved']. */
+    events:      text('events').array().notNull().default([]),
+    description: varchar('description', { length: 500 }),
+    active:      boolean('active').notNull().default(true),
+    createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:   timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    activeIdx: index('ix_webhook_sub_active').on(t.active),
+  }),
+);
+
+// ── Webhook delivery outbox ───────────────────────────────────────────────────
+
+export const webhookDeliveries = messagingSchema.table(
+  'webhook_deliveries',
+  {
+    id:             uuid('id').primaryKey().defaultRandom(),
+    subscriptionId: uuid('subscription_id').notNull(),
+    eventType:      varchar('event_type', { length: 100 }).notNull(),
+    payload:        jsonb('payload').notNull().$type<Record<string, unknown>>(),
+    status:         varchar('status', { length: 20 }).notNull().default('pending'),
+    attempts:       integer('attempts').notNull().default(0),
+    nextAttemptAt:  timestamp('next_attempt_at', { withTimezone: true }).notNull().defaultNow(),
+    deliveredAt:    timestamp('delivered_at', { withTimezone: true }),
+    lastError:      text('last_error'),
+    createdAt:      timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pendingIdx: index('ix_webhook_del_pending').on(t.status, t.nextAttemptAt),
+    subIdx:     index('ix_webhook_del_sub').on(t.subscriptionId),
+  }),
+);
