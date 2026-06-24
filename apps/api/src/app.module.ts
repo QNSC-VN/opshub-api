@@ -24,6 +24,7 @@ import { WorkforceModule } from '@modules/workforce';
 import { AuditModule } from '@modules/audit';
 import { NotificationsModule } from '@modules/notifications';
 import { RequestsModule } from '@modules/requests';
+import { ReportsModule } from '@modules/reports';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { RequestsModule } from '@modules/requests';
     ComplianceModule,
     WorkforceModule,
     RequestsModule,
+    ReportsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },

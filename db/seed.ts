@@ -31,6 +31,7 @@ const PERMISSIONS: Array<{ key: string; description: string }> = [
   { key: 'workforce.read', description: 'View timesheets and leave' },
   { key: 'workforce.approve', description: 'Approve timesheets and leave' },
   { key: 'audit.read', description: 'Read the audit log' },
+  { key: 'reports.read', description: 'View aggregate reports and analytics dashboards' },
 ];
 
 // ── System roles → permission bundles ───────────────────────────────────────────
@@ -50,6 +51,7 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
       'access_request.security_approve',
       'compliance.read',
       'audit.read',
+      'reports.read',
     ],
   },
   {
@@ -62,6 +64,7 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
       'access_request.approve',
       'access_request.security_approve',
       'audit.read',
+      'reports.read',
     ],
   },
   {
@@ -73,6 +76,7 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
       'employee.offboard',
       'workforce.read',
       'workforce.approve',
+      'reports.read',
     ],
   },
   {
@@ -84,6 +88,7 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
       'workforce.approve',
       'access_request.read',
       'access_request.approve',
+      'reports.read',
     ],
   },
   {
@@ -94,7 +99,7 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
   {
     key: 'auditor',
     name: 'Auditor (read-only)',
-    permissions: ['rbac.read', 'audit.read', 'compliance.read', 'employee.read', 'asset.read'],
+    permissions: ['rbac.read', 'audit.read', 'compliance.read', 'employee.read', 'asset.read', 'reports.read'],
   },
   { key: 'employee', name: 'Employee', permissions: [] },
 ];
