@@ -1,9 +1,14 @@
--- Creates the Postgres schemas before migrations run.
--- Mounted into the dev Postgres container via docker-compose.dev.yml.
-CREATE SCHEMA IF NOT EXISTS identity;
-CREATE SCHEMA IF NOT EXISTS assets;
-CREATE SCHEMA IF NOT EXISTS access;
-CREATE SCHEMA IF NOT EXISTS compliance;
-CREATE SCHEMA IF NOT EXISTS workforce;
-CREATE SCHEMA IF NOT EXISTS audit;
-CREATE SCHEMA IF NOT EXISTS messaging;
+-- ============================================================
+-- OpsHub — Postgres container init script
+-- Runs at container init (docker-entrypoint-initdb.d) via the
+-- postgres superuser BEFORE any application connections.
+--
+-- Schemas (identity, authz, requests, assets, access, compliance,
+-- workforce, audit, messaging, notifications) are intentionally
+-- NOT created here — Drizzle migrations own the full DDL lifecycle
+-- including CREATE SCHEMA statements. Running them here would cause
+-- the first migration to fail with "schema already exists".
+-- ============================================================
+
+-- pgcrypto: built-in on PG 13+; included for completeness.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
