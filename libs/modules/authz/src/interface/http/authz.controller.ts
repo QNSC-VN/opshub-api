@@ -5,16 +5,22 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Post,
   Put,
+  Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiCommonErrors, CurrentUser, RequirePermission } from '@platform';
 import type { JwtPayload, Permission, RoleAssignment, RoleWithPermissions } from '@platform';
+import { DelegationService, type ApprovalDelegation } from '@platform';
 import { AuthzAdminService } from '../../application/authz-admin.service';
 import {
   AssignRoleDto,
+  CreateDelegationDto,
   CreateRoleDto,
+  DelegationResponseDto,
+  ListDelegationsQueryDto,
   PermissionResponseDto,
   RoleAssignmentResponseDto,
   RoleResponseDto,
@@ -45,10 +51,25 @@ function toAssignmentDto(a: RoleAssignment): RoleAssignmentResponseDto {
   };
 }
 
+function toDelegationDto(d: ApprovalDelegation): DelegationResponseDto {
+  return {
+    id: d.id,
+    fromUserId: d.fromUserId,
+    toUserId: d.toUserId,
+    startsAt: d.startsAt.toISOString(),
+    endsAt: d.endsAt.toISOString(),
+    reason: d.reason,
+    createdAt: d.createdAt.toISOString(),
+  };
+}
+
 @ApiTags('authz')
 @Controller('authz')
 export class AuthzController {
-  constructor(private readonly authz: AuthzAdminService) {}
+  constructor(
+    private readonly authz: AuthzAdminService,
+    private readonly delegation: DelegationService,
+  ) {}
 
   @Get('permissions')
   @RequirePermission('rbac.read')
@@ -152,5 +173,59 @@ export class AuthzController {
     @CurrentUser() user: JwtPayload,
   ): Promise<void> {
     await this.authz.revokeAssignment(id, { sub: user.sub, email: user.email });
+  }
+
+  // ── Approval Delegation ────────────────────────────────────────────────────
+
+  @Post('delegations')
+  @ApiOperation({
+    summary: 'Create an approval delegation',
+    description:
+      'Delegates your approval authority to another user for a specified time window. ' +
+      'Useful for out-of-office coverage.',
+  })
+  @ApiCommonErrors(401, 422)
+  async createDelegation(
+    @Body() dto: CreateDelegationDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<DelegationResponseDto> {
+    const d = await this.delegation.create({
+      fromUserId: user.sub,
+      toUserId: dto.toUserId,
+      startsAt: dto.startsAt,
+      endsAt: dto.endsAt,
+      reason: dto.reason,
+    });
+    return toDelegationDto(d);
+  }
+
+  @Get('delegations')
+  @ApiOperation({
+    summary: 'List approval delegations',
+    description:
+      'Use `?direction=from` (default) to list delegations you created; ' +
+      '`?direction=to` for delegations you received.',
+  })
+  @ApiCommonErrors(401)
+  async listDelegations(
+    @Query() query: ListDelegationsQueryDto,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<DelegationResponseDto[]> {
+    const rows =
+      query.direction === 'to'
+        ? await this.delegation.listTo(user.sub)
+        : await this.delegation.listFrom(user.sub);
+    return rows.map(toDelegationDto);
+  }
+
+  @Delete('delegations/:id')
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Revoke an approval delegation' })
+  @ApiCommonErrors(401, 403, 404)
+  async revokeDelegation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: JwtPayload,
+  ): Promise<void> {
+    await this.delegation.revoke(id, user.sub);
   }
 }

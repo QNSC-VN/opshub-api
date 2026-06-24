@@ -41,6 +41,15 @@ export const requestItems = requestsSchema.table(
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
     /** Absolute deadline; expiry relay transitions status → expired after this time. */
     expiresAt: timestamp('expires_at', { withTimezone: true }),
+    /**
+     * SLA threshold in hours copied from the TypeDef at submit time.
+     * Null = no SLA defined for this request type.
+     */
+    slaHours: integer('sla_hours'),
+    /** Absolute SLA deadline (submittedAt + slaHours). Null if no SLA. */
+    slaDeadline: timestamp('sla_deadline', { withTimezone: true }),
+    /** Timestamp when the SLA breach was first detected by the cron. Null = not yet breached. */
+    slaBreachedAt: timestamp('sla_breached_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -49,6 +58,7 @@ export const requestItems = requestsSchema.table(
     statusTypeIdx: index('ix_ri_status_type').on(t.status, t.type, t.createdAt),
     assigneeIdx: index('ix_ri_assignee').on(t.assigneeId, t.status),
     expiryIdx: index('ix_ri_expiry').on(t.expiresAt, t.status),
+    slaIdx: index('ix_ri_sla').on(t.slaDeadline, t.status),
   }),
 );
 
@@ -69,6 +79,11 @@ export const requestApprovals = requestsSchema.table(
     /** 'approved' | 'rejected' | 'delegated' */
     decision: varchar('decision', { length: 20 }).notNull(),
     note: text('note'),
+    /**
+     * If the approver was acting as a delegate for another user (approval delegation),
+     * this field records the original delegator's user id. Null = direct approval.
+     */
+    delegatedFromId: uuid('delegated_from_id'),
     decidedAt: timestamp('decided_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

@@ -25,6 +25,8 @@ export class LeaveRequestTypeDef
   readonly requiredApprovalPermission = 'workforce.leave.review';
   readonly allowSelfApproval = false;
   readonly defaultExpiryHours = 72; // 3 days
+  /** SLA: notify if not approved within 48 h (2 business days) */
+  readonly slaHours = 48;
 
   constructor(private readonly registry: RequestRegistry) {}
 

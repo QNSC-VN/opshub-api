@@ -1,5 +1,6 @@
 import { createZodDto } from 'nestjs-zod';
 import { z } from 'zod';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export const ScopeTypeSchema = z.enum(['global', 'self', 'team', 'dept', 'region']);
 
@@ -51,4 +52,29 @@ export class RoleAssignmentResponseDto {
   grantedBy!: string;
   expiresAt!: string | null;
   createdAt!: string;
+}
+
+// ── Approval Delegation DTOs ──────────────────────────────────────────────────
+
+export const CreateDelegationSchema = z.object({
+  toUserId: z.string().uuid(),
+  startsAt: z.coerce.date(),
+  endsAt: z.coerce.date(),
+  reason: z.string().max(500).optional(),
+});
+export class CreateDelegationDto extends createZodDto(CreateDelegationSchema) {}
+
+export const ListDelegationsQuerySchema = z.object({
+  direction: z.enum(['from', 'to']).default('from'),
+});
+export class ListDelegationsQueryDto extends createZodDto(ListDelegationsQuerySchema) {}
+
+export class DelegationResponseDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() fromUserId!: string;
+  @ApiProperty() toUserId!: string;
+  @ApiProperty() startsAt!: string;
+  @ApiProperty() endsAt!: string;
+  @ApiPropertyOptional({ nullable: true }) reason!: string | null;
+  @ApiProperty() createdAt!: string;
 }

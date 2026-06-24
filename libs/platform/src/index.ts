@@ -13,3 +13,4 @@ export * from './rate-limit/index';
 export * from './email/index';
 export * from './notifications/index';
 export * from './requests/index';
+export * from './authz/delegation.service';

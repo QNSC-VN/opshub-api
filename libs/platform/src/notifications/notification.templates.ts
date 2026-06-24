@@ -11,7 +11,9 @@ export type NotificationTemplateName =
   | 'access_request.denied'
   | 'asset.assigned'
   | 'asset.unassigned'
-  | 'employee.offboarded';
+  | 'employee.offboarded'
+  | 'request.sla_breach'
+  | 'request.delegation_created';
 
 // ── Per-template variable shapes ─────────────────────────────────────────────
 
@@ -39,6 +41,15 @@ export interface NotificationTemplateVars {
   };
   'employee.offboarded': {
     employeeName: string;
+  };
+  'request.sla_breach': {
+    requestType: string;
+    requestId: string;
+    deadline: string; // ISO string
+  };
+  'request.delegation_created': {
+    delegatorName: string;
+    endsAt: string; // ISO string
   };
 }
 
@@ -87,6 +98,18 @@ const templates: {
     return {
       title: 'Offboarding complete',
       body:  `The offboarding process for ${v.employeeName} has been completed.`,
+    };
+  },
+  'request.sla_breach'(v) {
+    return {
+      title: 'SLA breach warning',
+      body:  `Your ${v.requestType} request (${v.requestId}) has exceeded its SLA deadline of ${v.deadline}. Please take action.`,
+    };
+  },
+  'request.delegation_created'(v) {
+    return {
+      title: 'Approval delegation received',
+      body:  `${v.delegatorName} has delegated their approval authority to you until ${v.endsAt}.`,
     };
   },
 };

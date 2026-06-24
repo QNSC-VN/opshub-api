@@ -1,11 +1,13 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { InjectDrizzle, type DrizzleDB, type DbExecutor, RequestRegistry, RequestTypeDef } from '@platform';
+import { type DbExecutor, RequestRegistry, RequestTypeDef } from '@platform';
 import { newId } from '@shared-kernel';
 import { accessRequests, accessGrants } from '../../../../../db/schema';
 
 export interface AccessRequestPayload extends Record<string, unknown> {
   accessRequestId: string;
+  /** Copied from engine requestItem.requesterId at submit time — avoids a SELECT inside the approval tx. */
+  requesterId: string;
   accessType: string;
   target: string;
   justification: string;
@@ -27,9 +29,10 @@ export class AccessRequestTypeDef
   readonly requiredApprovalPermission = 'access_request.approve';
   readonly allowSelfApproval = false;
   readonly defaultExpiryHours = 168; // 7 days
+  /** SLA: notify if not approved within 72 h (3 business days) */
+  readonly slaHours = 72;
 
   constructor(
-    @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly registry: RequestRegistry,
   ) {}
 
@@ -54,13 +57,7 @@ export class AccessRequestTypeDef
     await tx.insert(accessGrants).values({
       id: newId(),
       requestId: payload.accessRequestId,
-      granteeId: (
-        await this.db
-          .select({ requesterId: accessRequests.requesterId })
-          .from(accessRequests)
-          .where(eq(accessRequests.id, payload.accessRequestId))
-          .limit(1)
-      )[0]?.requesterId ?? approverId,
+      granteeId: payload.requesterId,
       accessType: payload.accessType as typeof accessGrants.$inferInsert['accessType'],
       target: payload.target,
       grantedAt: now,

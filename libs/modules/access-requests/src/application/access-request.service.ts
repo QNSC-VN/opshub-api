@@ -41,6 +41,7 @@ export class AccessRequestService {
 
     const enginePayload: AccessRequestPayload = {
       accessRequestId: domainRow.id,
+      requesterId: actor.sub,
       accessType: input.accessType,
       target: input.target,
       justification: input.justification,

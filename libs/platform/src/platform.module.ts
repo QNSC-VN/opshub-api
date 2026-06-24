@@ -26,6 +26,7 @@ import { EmailService } from './email/email.service';
 import { EmailSchedulerService } from './email/email-scheduler.service';
 import { NotificationSchedulerService } from './notifications/notification-scheduler.service';
 import { NotificationPubSubService } from './notifications/notification-pubsub.service';
+import { DelegationService } from './authz/delegation.service';
 
 /**
  * Platform module — cross-cutting infrastructure shared by every bounded context:
@@ -91,6 +92,7 @@ import { NotificationPubSubService } from './notifications/notification-pubsub.s
     EmailSchedulerService,
     NotificationSchedulerService,
     NotificationPubSubService,
+    DelegationService,
   ],
   exports: [
     AppConfigModule,
@@ -112,6 +114,7 @@ import { NotificationPubSubService } from './notifications/notification-pubsub.s
     EmailSchedulerService,
     NotificationSchedulerService,
     NotificationPubSubService,
+    DelegationService,
   ],
 })
 export class PlatformModule {}

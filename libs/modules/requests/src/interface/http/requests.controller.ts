@@ -26,6 +26,7 @@ function toApprovalDto(a: RequestItemWithApprovals['approvals'][number]): Reques
     approverId: a.approverId,
     decision: a.decision,
     note: a.note,
+    delegatedFromId: a.delegatedFromId,
     decidedAt: a.decidedAt.toISOString(),
   };
 }
@@ -43,6 +44,9 @@ function toDto(r: RequestItemWithApprovals): RequestItemResponseDto {
     submittedAt: r.submittedAt.toISOString(),
     resolvedAt: r.resolvedAt ? r.resolvedAt.toISOString() : null,
     expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null,
+    slaHours: r.slaHours,
+    slaDeadline: r.slaDeadline ? r.slaDeadline.toISOString() : null,
+    slaBreachedAt: r.slaBreachedAt ? r.slaBreachedAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),
     approvals: r.approvals.map(toApprovalDto),
@@ -85,8 +89,8 @@ export class RequestsController {
       query.offset,
     );
 
-    const enriched = await Promise.all(rows.map((r) => this.mustGetById(r.id)));
-    return buildPageResult(enriched.map(toDto), total, query.limit, query.offset);
+    // engine.list() now batch-loads approvals — no N+1
+    return buildPageResult(rows.map(toDto), total, query.limit, query.offset);
   }
 
   /** Get a single request item with its full approval history. */

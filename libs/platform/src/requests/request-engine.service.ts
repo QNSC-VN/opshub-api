@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { and, asc, desc, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { newId } from '@shared-kernel';
 import { InjectDrizzle, type DrizzleDB } from '../database/drizzle.provider';
 import { AuthzService } from '../auth/authz.service';
@@ -12,6 +12,7 @@ import {
 import { OutboxService } from '../outbox/outbox.service';
 import { requestItems, requestApprovals } from '../../../../db/schema';
 import { RequestRegistry } from './request-registry';
+import { DelegationService } from '../authz/delegation.service';
 import type {
   RequestFilters,
   RequestItem,
@@ -44,6 +45,7 @@ export class RequestEngine {
     private readonly registry: RequestRegistry,
     private readonly authz: AuthzService,
     private readonly outbox: OutboxService,
+    private readonly delegation: DelegationService,
   ) {}
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -62,6 +64,10 @@ export class RequestEngine {
         ? new Date(Date.now() + def.defaultExpiryHours * 3_600_000)
         : null);
 
+    // SLA deadline — stored for breach cron; separate from expiry
+    const slaHours = def.slaHours ?? null;
+    const slaDeadline = slaHours ? new Date(Date.now() + slaHours * 3_600_000) : null;
+
     const item = await this.db.transaction(async (tx) => {
       // Allow TypeDef to validate payload / check domain constraints
       if (def.onSubmit) {
@@ -79,6 +85,8 @@ export class RequestEngine {
           priority: opts?.priority ?? 'normal',
           payload,
           expiresAt,
+          slaHours,
+          slaDeadline,
         })
         .returning();
 
@@ -104,14 +112,23 @@ export class RequestEngine {
 
     const def = this.registry.get(request.type);
 
-    // Separation of duties: requester cannot approve unless TypeDef explicitly allows it
-    if (!def.allowSelfApproval && request.requesterId === actor.sub) {
-      throw new PermissionDeniedException('Requester cannot approve their own request');
+    // Approval delegation: check if actor is acting as delegate for another user
+    const activeDelegation = await this.delegation.findActiveDelegationTo(actor.sub);
+
+    // SoD check against the effective identity (delegator if delegated, else actor)
+    const sodSubject = activeDelegation ? activeDelegation.fromUserId : actor.sub;
+    if (!def.allowSelfApproval && request.requesterId === sodSubject) {
+      throw new PermissionDeniedException(
+        'REQUEST_SOD_VIOLATION: Requester cannot approve their own request',
+      );
     }
 
-    // Fine-grained permission check
-    const allowed = await this.authz.check(actor.sub, def.requiredApprovalPermission);
-    if (!allowed) {
+    // Permission check: actor's own permissions OR delegator's permissions (union semantics)
+    const actorAllowed = await this.authz.check(actor.sub, def.requiredApprovalPermission);
+    const delegatorAllowed = activeDelegation
+      ? await this.authz.check(activeDelegation.fromUserId, def.requiredApprovalPermission)
+      : false;
+    if (!actorAllowed && !delegatorAllowed) {
       throw new PermissionDeniedException(
         `Missing permission: ${def.requiredApprovalPermission}`,
       );
@@ -132,6 +149,7 @@ export class RequestEngine {
         approverId: actor.sub,
         decision: 'approved',
         note,
+        delegatedFromId: activeDelegation?.fromUserId ?? null,
       });
 
       await def.onApprove(request.payload, requestId, actor.sub, tx);
@@ -158,12 +176,20 @@ export class RequestEngine {
 
     const def = this.registry.get(request.type);
 
-    if (!def.allowSelfApproval && request.requesterId === actor.sub) {
-      throw new PermissionDeniedException('Requester cannot reject their own request');
+    // Delegation check — same as approve()
+    const activeDelegation = await this.delegation.findActiveDelegationTo(actor.sub);
+    const sodSubject = activeDelegation ? activeDelegation.fromUserId : actor.sub;
+    if (!def.allowSelfApproval && request.requesterId === sodSubject) {
+      throw new PermissionDeniedException(
+        'REQUEST_SOD_VIOLATION: Requester cannot reject their own request',
+      );
     }
 
-    const allowed = await this.authz.check(actor.sub, def.requiredApprovalPermission);
-    if (!allowed) {
+    const actorAllowed = await this.authz.check(actor.sub, def.requiredApprovalPermission);
+    const delegatorAllowed = activeDelegation
+      ? await this.authz.check(activeDelegation.fromUserId, def.requiredApprovalPermission)
+      : false;
+    if (!actorAllowed && !delegatorAllowed) {
       throw new PermissionDeniedException(
         `Missing permission: ${def.requiredApprovalPermission}`,
       );
@@ -184,6 +210,7 @@ export class RequestEngine {
         approverId: actor.sub,
         decision: 'rejected',
         note,
+        delegatedFromId: activeDelegation?.fromUserId ?? null,
       });
 
       if (def.onReject) {
@@ -303,7 +330,7 @@ export class RequestEngine {
     actorId: string,
     limit: number,
     offset: number,
-  ): Promise<{ rows: RequestItem[]; total: number }> {
+  ): Promise<{ rows: RequestItemWithApprovals[]; total: number }> {
     const conditions = [
       filters.type ? eq(requestItems.type, filters.type) : undefined,
       filters.requesterId ? eq(requestItems.requesterId, filters.requesterId) : undefined,
@@ -333,7 +360,32 @@ export class RequestEngine {
       .from(requestItems)
       .where(where);
 
-    return { rows: rows as RequestItem[], total: count };
+    // Batch-load approvals in a single query — no N+1
+    const ids = rows.map((r) => r.id);
+    const allApprovals =
+      ids.length > 0
+        ? await this.db
+            .select()
+            .from(requestApprovals)
+            .where(inArray(requestApprovals.requestId, ids))
+            .orderBy(asc(requestApprovals.step), asc(requestApprovals.decidedAt))
+        : [];
+
+    const approvalMap = new Map<string, RequestItemWithApprovals['approvals']>();
+    for (const a of allApprovals) {
+      const key = (a as { requestId: string }).requestId;
+      (approvalMap.get(key) ?? approvalMap.set(key, []).get(key)!).push(
+        a as RequestItemWithApprovals['approvals'][number],
+      );
+    }
+
+    return {
+      rows: rows.map((r) => ({
+        ...(r as RequestItem),
+        approvals: approvalMap.get(r.id) ?? [],
+      })),
+      total: count,
+    };
   }
 
   /** Fetch IDs of pending requests past their deadline (for the expiry cron). */

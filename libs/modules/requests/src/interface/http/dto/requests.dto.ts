@@ -30,6 +30,8 @@ export class RequestApprovalResponseDto {
   @ApiProperty() approverId!: string;
   @ApiProperty() decision!: string;
   @ApiPropertyOptional({ nullable: true }) note!: string | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Set when approver was acting as delegate for this user' })
+  delegatedFromId!: string | null;
   @ApiProperty() decidedAt!: string;
 }
 
@@ -45,6 +47,12 @@ export class RequestItemResponseDto {
   @ApiProperty() submittedAt!: string;
   @ApiPropertyOptional({ nullable: true }) resolvedAt!: string | null;
   @ApiPropertyOptional({ nullable: true }) expiresAt!: string | null;
+  @ApiPropertyOptional({ nullable: true, description: 'SLA threshold hours for this request type' })
+  slaHours!: number | null;
+  @ApiPropertyOptional({ nullable: true, description: 'Absolute SLA deadline' })
+  slaDeadline!: string | null;
+  @ApiPropertyOptional({ nullable: true, description: 'When SLA breach was first detected' })
+  slaBreachedAt!: string | null;
   @ApiProperty() createdAt!: string;
   @ApiProperty() updatedAt!: string;
   @ApiPropertyOptional({ type: [RequestApprovalResponseDto] })

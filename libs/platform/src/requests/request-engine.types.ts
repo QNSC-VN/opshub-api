@@ -22,6 +22,12 @@ export interface RequestItem {
   submittedAt: Date;
   resolvedAt: Date | null;
   expiresAt: Date | null;
+  /** SLA threshold hours copied from the TypeDef at submit time. Null = no SLA. */
+  slaHours: number | null;
+  /** Absolute SLA deadline. Null if no SLA defined. */
+  slaDeadline: Date | null;
+  /** Timestamp of first SLA breach detection. Null = within SLA or no SLA. */
+  slaBreachedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +39,11 @@ export interface RequestApproval {
   approverId: string;
   decision: 'approved' | 'rejected' | 'delegated';
   note: string | null;
+  /**
+   * If the approver was acting as a delegate for another user, this records
+   * the original delegator. Null = direct approval (most common case).
+   */
+  delegatedFromId: string | null;
   decidedAt: Date;
 }
 
@@ -76,6 +87,12 @@ export interface RequestTypeDef<TPayload = Record<string, unknown>> {
   readonly allowSelfApproval?: boolean;
   /** Auto-expire after N hours with no decision. 0 = no expiry. */
   readonly defaultExpiryHours?: number;
+  /**
+   * SLA threshold in hours. If set, a `sla_deadline` is stored at submit time.
+   * The SlaBreachCron notifies stakeholders when the deadline passes without a decision.
+   * This is separate from expiry: SLA breach = notification only; expiry = auto-cancel.
+   */
+  readonly slaHours?: number;
   /** Called inside the submit transaction. Use for domain validation (e.g. overlap check). */
   onSubmit?(payload: TPayload, requesterId: string, tx: DbExecutor): Promise<void>;
   /** Called inside the approval transaction. REQUIRED: create domain records here. */
