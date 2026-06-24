@@ -104,6 +104,18 @@ export class RequestEngine {
       await this.outbox.enqueue(tx, { aggregateType: 'request', aggregateId: row.id, eventType: 'request.submitted', payload: submitPayload });
       await this.webhookEnqueue.fanout(tx, 'request.submitted', submitPayload);
 
+      // Notify the initial assignee (if any) that a new request awaits review.
+      if (row.assigneeId) {
+        await this.notifScheduler.schedule(tx, {
+          type: 'request.submitted',
+          vars: { requestType: type, requestId: row.id, requesterEmail: actor.email },
+          recipientId: row.assigneeId,
+          actorId: actor.sub,
+          resourceId: row.id,
+          idempotencyKey: `request_submitted:${row.id}`,
+        });
+      }
+
       return row;
     });
 
@@ -187,6 +199,15 @@ export class RequestEngine {
       if (isFinalStep) {
         // Final approval: call domain hook
         await def.onApprove(request.payload, requestId, actor.sub, tx);
+        // Notify the requester their request has been approved.
+        await this.notifScheduler.schedule(tx, {
+          type: 'request.approved',
+          vars: { requestType: request.type, requestId },
+          recipientId: request.requesterId,
+          actorId: actor.sub,
+          resourceId: requestId,
+          idempotencyKey: `request_approved:${requestId}`,
+        });
       } else {
         // Intermediate approval: call optional step hook and notify next assignee
         if (def.onStepApproved) {
@@ -288,6 +309,16 @@ export class RequestEngine {
       if (def.onReject) {
         await def.onReject(request.payload, requestId, actor.sub, tx);
       }
+
+      // Notify the requester their request has been rejected.
+      await this.notifScheduler.schedule(tx, {
+        type: 'request.rejected',
+        vars: { requestType: request.type, requestId, reason: note ?? undefined },
+        recipientId: request.requesterId,
+        actorId: actor.sub,
+        resourceId: requestId,
+        idempotencyKey: `request_rejected:${requestId}`,
+      });
 
       const rejectedPayload = { requestId, type: request.type, approverId: actor.sub, note };
       await this.outbox.enqueue(tx, { aggregateType: 'request', aggregateId: requestId, eventType: 'request.rejected', payload: rejectedPayload });

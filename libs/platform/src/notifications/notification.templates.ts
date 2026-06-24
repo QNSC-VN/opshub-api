@@ -14,7 +14,10 @@ export type NotificationTemplateName =
   | 'employee.offboarded'
   | 'request.sla_breach'
   | 'request.delegation_created'
-  | 'request.step_ready';
+  | 'request.step_ready'
+  | 'request.submitted'
+  | 'request.approved'
+  | 'request.rejected';
 
 // ── Per-template variable shapes ─────────────────────────────────────────────
 
@@ -58,6 +61,20 @@ export interface NotificationTemplateVars {
     completedStep: number;
     nextStep: number;
     totalSteps: number;
+  };
+  'request.submitted': {
+    requestType: string;
+    requestId: string;
+    requesterEmail: string;
+  };
+  'request.approved': {
+    requestType: string;
+    requestId: string;
+  };
+  'request.rejected': {
+    requestType: string;
+    requestId: string;
+    reason?: string;
   };
 }
 
@@ -124,6 +141,25 @@ const templates: {
     return {
       title: `Action required: ${v.requestType} approval (step ${v.nextStep}/${v.totalSteps})`,
       body:  `Step ${v.completedStep} has been approved. Your review is now required (step ${v.nextStep} of ${v.totalSteps}).`,
+    };
+  },
+  'request.submitted'(v) {
+    return {
+      title: `New ${v.requestType} request awaiting review`,
+      body:  `${v.requesterEmail} submitted a ${v.requestType} request (${v.requestId}) that requires your approval.`,
+    };
+  },
+  'request.approved'(v) {
+    return {
+      title: `Your ${v.requestType} request was approved`,
+      body:  `Your ${v.requestType} request (${v.requestId}) has been approved.`,
+    };
+  },
+  'request.rejected'(v) {
+    const extra = v.reason ? ` Reason: ${v.reason}` : '';
+    return {
+      title: `Your ${v.requestType} request was rejected`,
+      body:  `Your ${v.requestType} request (${v.requestId}) has been rejected.${extra}`,
     };
   },
 };

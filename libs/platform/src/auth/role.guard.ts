@@ -21,6 +21,8 @@ export class RoleGuard implements CanActivate {
 
     const user = context.switchToHttp().getRequest<{ user?: JwtPayload }>().user;
     const roles = user?.roles ?? [];
+    // 'admin' role has wildcard permissions — bypass all role restrictions.
+    if (roles.includes('admin')) return true;
     if (required.some((r) => roles.includes(r))) return true;
 
     throw new PermissionDeniedException(`Requires one of roles: ${required.join(', ')}`);
