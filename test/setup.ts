@@ -5,7 +5,7 @@
 import { vi } from 'vitest';
 
 // Silence console.error and console.warn in tests unless LOG_LEVEL is set
-if (process.env['LOG_LEVEL'] === 'silent') {
+if (process.env['LOG_LEVEL'] === 'silent' || process.env['LOG_LEVEL'] === 'fatal') {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 }

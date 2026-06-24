@@ -26,7 +26,7 @@ export default defineConfig({
       JWT_ISSUER: 'opshub-test',
       JWT_AUDIENCE: 'opshub-test-app',
       CORS_ORIGINS: 'http://localhost:5173',
-      LOG_LEVEL: 'silent',
+      LOG_LEVEL: 'fatal',
       LOG_PRETTY: 'false',
       LOG_SQL: 'false',
       OTEL_ENABLED: 'false',

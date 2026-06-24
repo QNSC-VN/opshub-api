@@ -3,6 +3,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Auth, ApiCommonErrors, CurrentUser, Public, UnauthorizedException, PermissionDeniedException, ErrorCodes, AppConfigService, RateLimit } from '@platform';
 import type { JwtPayload } from '@platform';
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import '@fastify/cookie';
 import { AuthService } from '../../application/auth.service';
 import { DevLoginDto, EntraLoginDto, AuthResponseDto, MeResponseDto } from './dto/auth.dto';
 
