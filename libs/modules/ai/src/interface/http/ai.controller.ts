@@ -1,6 +1,6 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, CurrentUser } from '@platform';
+import { Auth, RateLimit, ApiCommonErrors, CurrentUser } from '@platform';
 import type { JwtPayload } from '@platform';
 import { AiService } from '../../application/ai.service';
 import { ChatRequestDto } from './dto/ai.dto';
@@ -8,6 +8,7 @@ import { ChatRequestDto } from './dto/ai.dto';
 @ApiTags('ai')
 @Controller('ai')
 @Auth()
+@RateLimit('AI')
 export class AiController {
   constructor(private readonly ai: AiService) {}
 

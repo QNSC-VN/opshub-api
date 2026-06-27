@@ -40,9 +40,10 @@ export const EnvSchema = z.object({
   // Entra ID SSO — required in production, optional in dev (enables entra-login endpoint).
   ENTRA_TENANT_ID: z.string().uuid().optional(),
   ENTRA_CLIENT_ID: z.string().uuid().optional(),
-  // Graph API app-only client secret — enables device compliance sync, PIM elevation, provisioning.
-  // When absent, all Graph-dependent features gracefully degrade (no sync, no PIM calls).
-  GRAPH_CLIENT_SECRET: z.string().optional(),
+  /** Client secret for Entra app — used for Graph API calls (MSAL confidential client). */
+  ENTRA_CLIENT_SECRET: z.string().min(1).optional(),
+  /** Microsoft Graph client secret — may differ from Entra client secret in some setups. */
+  GRAPH_CLIENT_SECRET: z.string().min(1).optional(),
   // Used to sign fastify-cookie (required for CSRF signed cookies).
   COOKIE_SECRET: z.string().min(32),
   /** Short-lived access token — 15 min is enterprise standard (token theft window). */
@@ -57,6 +58,8 @@ export const EnvSchema = z.object({
   SQS_OUTBOX_URL: z.string().optional(),
   /** S3 bucket for all stored files. Optional in dev — uploads will be stubbed. */
   S3_FILES_BUCKET: z.string().optional(),
+  /** S3 bucket for transient uploads (leave docs, photos) — injected by infra as S3_UPLOAD_BUCKET. */
+  S3_UPLOAD_BUCKET: z.string().optional(),
   /** CloudFront base URL for file downloads. When set, overrides presigned S3 GET URLs. */
   CDN_FILES_BASE_URL: z.string().optional(),
 
@@ -72,6 +75,8 @@ export const EnvSchema = z.object({
 
   // ── Cache (Valkey / Redis — optional in dev) ───────────────────────────────
   REDIS_URL: z.string().optional(),
+  /** Alias for REDIS_URL injected by infra as VALKEY_URL. Takes precedence if both set. */
+  VALKEY_URL: z.string().optional(),
   REDIS_KEY_PREFIX: z.string().default('opshub:'),
 
   // ── Email ──────────────────────────────────────────────────────────────────
@@ -80,12 +85,6 @@ export const EnvSchema = z.object({
   MAIL_FROM_EMAIL: z.string().email().default('no-reply@opshub.app'),
   MAIL_REPLY_TO: z.string().email().optional(),
   RESEND_API_KEY: z.string().optional(),
-
-  // ── AI Assistant ──────────────────────────────────────────────────────────
-  /** Anthropic API key — enables the AI assistant (/v1/ai/chat). When absent, AI chat returns 503. */
-  ANTHROPIC_API_KEY: z.string().optional(),
-  /** Claude model ID to use for AI assistant (defaults to claude-sonnet-4-6). */
-  ANTHROPIC_MODEL: z.string().default('claude-sonnet-4-6'),
 
   // ── Frontend ───────────────────────────────────────────────────────────────
   /** Public base URL used to build links inside notification emails. */

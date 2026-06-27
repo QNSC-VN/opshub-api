@@ -35,6 +35,10 @@ export const RATE_LIMIT_TIERS = {
    * so 300 employees behind the same corporate proxy each still get 30/min.
    */
   AUTH_REFRESH: { name: 'AUTH_REFRESH', windowMs: 60_000, limit: 30, keyBy: 'refreshToken' },
+  /** AI chat — LLM calls are expensive; 10 req/min per userId to cap inference cost. */
+  AI: { name: 'AI', windowMs: 60_000, limit: 10, keyBy: 'userId' },
+  /** File upload presign/confirm — S3 PUT costs; 30 req/min per userId. */
+  UPLOAD: { name: 'UPLOAD', windowMs: 60_000, limit: 30, keyBy: 'userId' },
 } as const satisfies Record<string, RateLimitTier>;
 
 export type RateLimitTierName = keyof typeof RATE_LIMIT_TIERS;

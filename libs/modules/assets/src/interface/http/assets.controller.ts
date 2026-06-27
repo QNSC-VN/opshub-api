@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser, RateLimit } from '@platform';
+import { Auth, RateLimit, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { AuditService } from '@modules/audit';
 import { AssetService } from '../../application/asset.service';
@@ -55,7 +55,6 @@ export class AssetsController {
 
   @Get()
   @Auth()
-  @RateLimit('STRICT')
   @ApiOperation({ summary: 'List hardware assets' })
   @ApiPagedResponse(AssetResponseDto)
   @ApiCommonErrors(401)
@@ -173,6 +172,7 @@ export class AssetsController {
 
   @Post(':id/photo/presign')
   @Auth('it-admin')
+  @RateLimit('UPLOAD')
   @ApiOperation({ summary: 'Get a presigned S3 PUT URL to upload an asset photo' })
   @ApiOkResponse({ schema: { properties: { fileId: { type: 'string' }, uploadUrl: { type: 'string' }, key: { type: 'string' } }, required: ['fileId', 'uploadUrl', 'key'] } })
   @ApiCommonErrors(401, 403, 404, 422)
@@ -186,6 +186,7 @@ export class AssetsController {
 
   @Post(':id/photo/confirm')
   @Auth('it-admin')
+  @RateLimit('UPLOAD')
   @ApiOperation({ summary: 'Confirm asset photo upload completed' })
   @ApiOkResponse({ schema: { properties: { photoUrl: { type: 'string' } }, required: ['photoUrl'] } })
   @ApiCommonErrors(401, 403, 404, 422)

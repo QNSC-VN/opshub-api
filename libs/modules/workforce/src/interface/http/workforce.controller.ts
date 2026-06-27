@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
+import { Auth, RequirePermission, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { EmployeeService } from '@modules/identity';
 import { AuditService } from '@modules/audit';
@@ -347,7 +347,7 @@ export class WorkforceController {
   // ── Onboarding ─────────────────────────────────────────────────────────────
 
   @Post('onboarding')
-  @Auth('onboarding.approve')
+  @RequirePermission('onboarding.approve')
   @ApiOperation({ summary: 'Submit a 3-step onboarding request for a new employee' })
   @ApiResponse({ status: 201, type: OnboardingResponseDto })
   @ApiCommonErrors(400, 401, 403, 404)
@@ -377,7 +377,7 @@ export class WorkforceController {
   // ── Offboarding ────────────────────────────────────────────────────────────
 
   @Post('offboarding')
-  @Auth('offboarding.approve')
+  @RequirePermission('offboarding.approve')
   @ApiOperation({ summary: 'Submit an offboarding request — revokes all access on approval' })
   @ApiResponse({ status: 201, type: OffboardingResponseDto })
   @ApiCommonErrors(400, 401, 403, 404)
