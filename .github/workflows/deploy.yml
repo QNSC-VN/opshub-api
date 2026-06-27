@@ -89,11 +89,11 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
 
       - name: Scan for secrets
-        uses: nghiavan0610/qncs-gitops/actions/scan-secrets@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/scan-secrets@${{ env.GITOPS_SHA }}
 
       - name: Setup AWS OIDC + ECR login
         id: aws
-        uses: nghiavan0610/qncs-gitops/actions/setup-aws-oidc@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/setup-aws-oidc@${{ env.GITOPS_SHA }}
         with:
           role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-ecr-push
           region: ${{ vars.AWS_REGION }}
@@ -102,7 +102,7 @@ jobs:
       # ── Build & push API ──────────────────────────────────────────────────
       - name: Build & push API image
         id: build-api
-        uses: nghiavan0610/qncs-gitops/actions/build-push-ecr@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/build-push-ecr@${{ env.GITOPS_SHA }}
         with:
           ecr-registry: ${{ steps.aws.outputs.ecr-registry }}
           image-name: opshub-api
@@ -112,14 +112,14 @@ jobs:
           cache-scope: api
 
       - name: Attest API image (SLSA provenance)
-        uses: nghiavan0610/qncs-gitops/actions/attest-image@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/attest-image@${{ env.GITOPS_SHA }}
         with:
           image-ref: ${{ steps.aws.outputs.ecr-registry }}/opshub-api@${{ steps.build-api.outputs.image-digest }}
 
       # ── Build & push Worker ───────────────────────────────────────────────
       - name: Build & push Worker image
         id: build-worker
-        uses: nghiavan0610/qncs-gitops/actions/build-push-ecr@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/build-push-ecr@${{ env.GITOPS_SHA }}
         with:
           ecr-registry: ${{ steps.aws.outputs.ecr-registry }}
           image-name: opshub-worker
@@ -129,14 +129,14 @@ jobs:
           cache-scope: worker
 
       - name: Attest Worker image (SLSA provenance)
-        uses: nghiavan0610/qncs-gitops/actions/attest-image@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/attest-image@${{ env.GITOPS_SHA }}
         with:
           image-ref: ${{ steps.aws.outputs.ecr-registry }}/opshub-worker@${{ steps.build-worker.outputs.image-digest }}
 
       # ── Build & push Migrator ─────────────────────────────────────────────
       - name: Build & push Migrator image
         id: build-migrator
-        uses: nghiavan0610/qncs-gitops/actions/build-push-ecr@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/build-push-ecr@${{ env.GITOPS_SHA }}
         with:
           ecr-registry: ${{ steps.aws.outputs.ecr-registry }}
           image-name: opshub-migrator
@@ -146,7 +146,7 @@ jobs:
           cache-scope: migrator
 
       - name: Attest Migrator image (SLSA provenance)
-        uses: nghiavan0610/qncs-gitops/actions/attest-image@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/attest-image@${{ env.GITOPS_SHA }}
         with:
           image-ref: ${{ steps.aws.outputs.ecr-registry }}/opshub-migrator@${{ steps.build-migrator.outputs.image-digest }}
 
@@ -173,7 +173,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683   # v4.2.2
 
       - name: Setup AWS OIDC (deploy role)
-        uses: nghiavan0610/qncs-gitops/actions/setup-aws-oidc@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/setup-aws-oidc@${{ env.GITOPS_SHA }}
         with:
           role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-deploy-${{ env.ENVIRONMENT }}
           region: ${{ vars.AWS_REGION }}
@@ -236,7 +236,7 @@ jobs:
 
       # ── Step 2: Run migrations BEFORE any traffic shifts ─────────────────
       - name: Run database migrations
-        uses: nghiavan0610/qncs-gitops/actions/run-db-migration@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/run-db-migration@${{ env.GITOPS_SHA }}
         with:
           cluster:            ${{ vars.ECS_CLUSTER }}
           task-definition:    ${{ vars.ECS_MIGRATOR_TASK_DEF }}
@@ -266,7 +266,7 @@ jobs:
 
       # ── Step 4: Verify API is running the expected image tag ──────────────
       - name: Verify API deployment
-        uses: nghiavan0610/qncs-gitops/actions/verify-ecs-deploy@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/verify-ecs-deploy@${{ env.GITOPS_SHA }}
         with:
           cluster:   ${{ vars.ECS_CLUSTER }}
           service:   ${{ vars.ECS_API_SERVICE }}
@@ -276,7 +276,7 @@ jobs:
       # ── Step 5: Health check — confirm the new version serves traffic ─────
       - name: Post-deploy health check
         if: vars.APP_URL != ''
-        uses: nghiavan0610/qncs-gitops/actions/post-deploy-health-check@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/post-deploy-health-check@${{ env.GITOPS_SHA }}
         with:
           url:             ${{ vars.APP_URL }}
           timeout-seconds: '120'
@@ -297,7 +297,7 @@ jobs:
       # ── Step 7: Notify Slack / Discord (always — even on failure) ─────────
       - name: Notify deploy result
         if: always()
-        uses: nghiavan0610/qncs-gitops/actions/notify-deploy@${{ env.GITOPS_SHA }}
+        uses: QNSC-VN/qncs-gitops/actions/notify-deploy@${{ env.GITOPS_SHA }}
         with:
           webhook-url: ${{ secrets.SLACK_DEPLOY_WEBHOOK }}
           status:      ${{ job.status == 'success' && 'success' || 'failure' }}
@@ -365,13 +365,13 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - uses: nghiavan0610/qncs-gitops/actions/setup-aws-oidc@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+      - uses: QNSC-VN/qncs-gitops/actions/setup-aws-oidc@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
         with:
           role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-deploy
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Build & push api
-        uses: nghiavan0610/qncs-gitops/actions/build-push-ecr@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+        uses: QNSC-VN/qncs-gitops/actions/build-push-ecr@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
         with:
           ecr-registry: ${{ env.ECR_REGISTRY }}
           image-name: opshub-api
@@ -380,7 +380,7 @@ jobs:
           cache-scope: api
 
       - name: Build & push worker
-        uses: nghiavan0610/qncs-gitops/actions/build-push-ecr@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+        uses: QNSC-VN/qncs-gitops/actions/build-push-ecr@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
         with:
           ecr-registry: ${{ env.ECR_REGISTRY }}
           image-name: opshub-worker
@@ -389,7 +389,7 @@ jobs:
           cache-scope: worker
 
       - name: Build & push migrator
-        uses: nghiavan0610/qncs-gitops/actions/build-push-ecr@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+        uses: QNSC-VN/qncs-gitops/actions/build-push-ecr@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
         with:
           ecr-registry: ${{ env.ECR_REGISTRY }}
           image-name: opshub-migrator
@@ -416,13 +416,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: nghiavan0610/qncs-gitops/actions/setup-aws-oidc@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+      - uses: QNSC-VN/qncs-gitops/actions/setup-aws-oidc@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
         with:
           role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-deploy
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Run DB migrations
-        uses: nghiavan0610/qncs-gitops/actions/ecs-run-task@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+        uses: QNSC-VN/qncs-gitops/actions/ecs-run-task@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
         with:
           cluster: ${{ vars.ECS_CLUSTER }}
           task-definition: ${{ vars.ECS_MIGRATOR_TASK_DEF }}
@@ -432,28 +432,28 @@ jobs:
             {"containerOverrides":[{"name":"migrator","image":"${{ env.ECR_REGISTRY }}/opshub-migrator:${{ env.IMAGE_TAG }}"}]}
 
       - name: Update API service
-        uses: nghiavan0610/qncs-gitops/actions/ecs-run-task@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+        uses: QNSC-VN/qncs-gitops/actions/ecs-run-task@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
         with:
           cluster: ${{ vars.ECS_CLUSTER }}
           service: ${{ vars.ECS_API_SERVICE }}
           image: ${{ env.ECR_REGISTRY }}/opshub-api:${{ env.IMAGE_TAG }}
 
       - name: Update Worker service
-        uses: nghiavan0610/qncs-gitops/actions/ecs-run-task@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+        uses: QNSC-VN/qncs-gitops/actions/ecs-run-task@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
         with:
           cluster: ${{ vars.ECS_CLUSTER }}
           service: ${{ vars.ECS_WORKER_SERVICE }}
           image: ${{ env.ECR_REGISTRY }}/opshub-worker:${{ env.IMAGE_TAG }}
 
       - name: Verify deployment health
-        uses: nghiavan0610/qncs-gitops/actions/verify-ecs-deploy@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+        uses: QNSC-VN/qncs-gitops/actions/verify-ecs-deploy@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
         with:
           cluster: ${{ vars.ECS_CLUSTER }}
           services: "${{ vars.ECS_API_SERVICE }},${{ vars.ECS_WORKER_SERVICE }}"
 
       - name: Notify deploy
         if: always()
-        uses: nghiavan0610/qncs-gitops/actions/notify-deploy@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+        uses: QNSC-VN/qncs-gitops/actions/notify-deploy@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
         with:
           environment: ${{ env.ENVIRONMENT }}
           image-tag: ${{ env.IMAGE_TAG }}

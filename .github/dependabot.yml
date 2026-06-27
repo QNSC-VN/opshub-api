@@ -23,7 +23,7 @@ updates:
       prefix: "deps"
       include: scope
     reviewers:
-      - nghiavan0610
+      - QNSC-VN
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
@@ -46,7 +46,7 @@ updates:
     commit-message:
       prefix: "ci(deps)"
     reviewers:
-      - nghiavan0610
+      - QNSC-VN
 
   # ── Docker base images ──────────────────────────────────────────────────────
   - package-ecosystem: docker
@@ -63,4 +63,4 @@ updates:
     commit-message:
       prefix: "chore(docker)"
     reviewers:
-      - nghiavan0610
+      - QNSC-VN
