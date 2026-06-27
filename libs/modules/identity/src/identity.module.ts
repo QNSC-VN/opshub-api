@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '@modules/audit';
+import { AuthzModule } from '@modules/authz';
 import { EmployeeService } from './application/employee.service';
 import { AuthService } from './application/auth.service';
 import { EmployeesController } from './interface/http/employees.controller';
@@ -10,7 +11,7 @@ import { EMPLOYEE_REPOSITORY } from './domain/ports/employee.repository';
 import { REFRESH_TOKEN_REPOSITORY } from './domain/ports/refresh-token.repository';
 
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, AuthzModule],
   controllers: [EmployeesController, AuthController],
   providers: [
     EmployeeService,
@@ -21,4 +22,3 @@ import { REFRESH_TOKEN_REPOSITORY } from './domain/ports/refresh-token.repositor
   exports: [EmployeeService],
 })
 export class IdentityModule {}
-

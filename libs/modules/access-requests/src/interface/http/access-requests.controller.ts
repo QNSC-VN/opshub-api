@@ -1,6 +1,13 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
+import {
+  Auth,
+  RequirePermission,
+  ApiCommonErrors,
+  ApiPagedResponse,
+  buildPageResult,
+  CurrentUser,
+} from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { AuditService } from '@modules/audit';
 import { AccessRequestService } from '../../application/access-request.service';
@@ -91,13 +98,17 @@ export class AccessRequestsController {
       action: 'access_request.submitted',
       resourceType: 'access_request',
       resourceId: result.id,
-      metadata: { accessType: dto.accessType, target: dto.target, durationHours: dto.durationHours },
+      metadata: {
+        accessType: dto.accessType,
+        target: dto.target,
+        durationHours: dto.durationHours,
+      },
     });
     return toDto(result);
   }
 
   @Post(':id/approve')
-  @Auth('it-admin', 'security')
+  @RequirePermission('access_request.security_approve')
   @ApiOperation({ summary: 'Approve a request and issue a time-boxed grant' })
   @ApiCreatedResponse({ type: AccessGrantResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
@@ -119,7 +130,7 @@ export class AccessRequestsController {
   }
 
   @Post(':id/reject')
-  @Auth('it-admin', 'security')
+  @RequirePermission('access_request.security_approve')
   @ApiOperation({ summary: 'Reject a pending request' })
   @ApiOkResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
@@ -141,7 +152,7 @@ export class AccessRequestsController {
   }
 
   @Post('grants/:grantId/revoke')
-  @Auth('it-admin', 'security')
+  @RequirePermission('access_request.security_approve')
   @ApiOperation({ summary: 'Revoke an active grant' })
   @ApiOkResponse({ schema: { type: 'object', properties: { status: { type: 'string' } } } })
   @ApiCommonErrors(401, 403, 404, 412)

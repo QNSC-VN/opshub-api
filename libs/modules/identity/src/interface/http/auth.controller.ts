@@ -1,6 +1,17 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
 import { ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, CurrentUser, Public, UnauthorizedException, PermissionDeniedException, ErrorCodes, AppConfigService, RateLimit } from '@platform';
+import {
+  Auth,
+  ApiCommonErrors,
+  CurrentUser,
+  Public,
+  UnauthorizedException,
+  PermissionDeniedException,
+  ErrorCodes,
+  AppConfigService,
+  AuthzService,
+  RateLimit,
+} from '@platform';
 import type { JwtPayload } from '@platform';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import '@fastify/cookie';
@@ -29,6 +40,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly config: AppConfigService,
+    private readonly authz: AuthzService,
   ) {
     this.#isProd = config.get('NODE_ENV') === 'production';
     this.#refreshMaxAge = config.get('JWT_REFRESH_EXPIRY_DAYS') * 24 * 60 * 60;
@@ -48,8 +60,14 @@ export class AuthController {
     @Body() dto: EntraLoginDto,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<AuthResponseDto> {
-    const { accessToken, expiresIn, rawRefreshToken } = await this.authService.entraLogin(dto.idToken);
-    reply.setCookie(REFRESH_COOKIE, rawRefreshToken, refreshCookieOptions(this.#refreshMaxAge, this.#isProd));
+    const { accessToken, expiresIn, rawRefreshToken } = await this.authService.entraLogin(
+      dto.idToken,
+    );
+    reply.setCookie(
+      REFRESH_COOKIE,
+      rawRefreshToken,
+      refreshCookieOptions(this.#refreshMaxAge, this.#isProd),
+    );
     return { accessToken, expiresIn };
   }
 
@@ -57,7 +75,9 @@ export class AuthController {
   @Public()
   @RateLimit('AUTH_LOGIN')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Dev login — only available outside production (Entra OIDC is used in prod)' })
+  @ApiOperation({
+    summary: 'Dev login — only available outside production (Entra OIDC is used in prod)',
+  })
   @ApiOkResponse({ type: AuthResponseDto })
   @ApiCommonErrors(401, 403, 422)
   async devLogin(
@@ -68,7 +88,11 @@ export class AuthController {
       throw new PermissionDeniedException('Dev login is disabled in production');
     }
     const { accessToken, expiresIn, rawRefreshToken } = await this.authService.devLogin(dto.email);
-    reply.setCookie(REFRESH_COOKIE, rawRefreshToken, refreshCookieOptions(this.#refreshMaxAge, this.#isProd));
+    reply.setCookie(
+      REFRESH_COOKIE,
+      rawRefreshToken,
+      refreshCookieOptions(this.#refreshMaxAge, this.#isProd),
+    );
     return { accessToken, expiresIn };
   }
 
@@ -89,14 +113,21 @@ export class AuthController {
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'No refresh token');
     }
     const { accessToken, expiresIn, rawRefreshToken } = await this.authService.refresh(rawToken);
-    reply.setCookie(REFRESH_COOKIE, rawRefreshToken, refreshCookieOptions(this.#refreshMaxAge, this.#isProd));
+    reply.setCookie(
+      REFRESH_COOKIE,
+      rawRefreshToken,
+      refreshCookieOptions(this.#refreshMaxAge, this.#isProd),
+    );
     return { accessToken, expiresIn };
   }
 
   @Post('logout')
   @Auth()
   @HttpCode(204)
-  @ApiOperation({ summary: 'Revoke the current session — invalidates both the refresh token and the active access token' })
+  @ApiOperation({
+    summary:
+      'Revoke the current session — invalidates both the refresh token and the active access token',
+  })
   @ApiNoContentResponse()
   async logout(
     @CurrentUser() user: JwtPayload,
@@ -114,12 +145,20 @@ export class AuthController {
 
   @Get('me')
   @Auth()
-  @ApiOperation({ summary: 'Return the authenticated principal' })
+  @ApiOperation({ summary: 'Return the authenticated principal and its effective permissions' })
   @ApiOkResponse({ type: MeResponseDto })
   @ApiCommonErrors(401)
-  me(@CurrentUser() user: JwtPayload): MeResponseDto {
-    return { sub: user.sub, email: user.email, name: user.name, roles: user.roles };
+  async me(@CurrentUser() user: JwtPayload): Promise<MeResponseDto> {
+    // Effective permissions come from the DB (the single source of truth the
+    // PolicyGuard also enforces). The SPA gates its UI on this list rather than
+    // re-deriving permissions from role names, so FE and BE can never drift.
+    const effective = await this.authz.resolve(user.sub);
+    return {
+      sub: user.sub,
+      email: user.email,
+      name: user.name,
+      roles: user.roles,
+      permissions: Object.keys(effective),
+    };
   }
 }
-
-

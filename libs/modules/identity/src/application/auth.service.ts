@@ -5,10 +5,8 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { UnauthorizedException, ErrorCodes, AppConfigService, CacheService } from '@platform';
 import { MS_PER_DAY } from '@shared-kernel';
 import { AuditService } from '@modules/audit';
-import {
-  EMPLOYEE_REPOSITORY,
-  type IEmployeeRepository,
-} from '../domain/ports/employee.repository';
+import { AuthzAdminService } from '@modules/authz';
+import { EMPLOYEE_REPOSITORY, type IEmployeeRepository } from '../domain/ports/employee.repository';
 import {
   REFRESH_TOKEN_REPOSITORY,
   type IRefreshTokenRepository,
@@ -49,11 +47,16 @@ export class AuthService {
     if (!match) return AuthService.SESSION_REVOKE_TTL;
     const n = parseInt(match[1], 10);
     switch (match[2]) {
-      case 's': return n;
-      case 'm': return n * 60;
-      case 'h': return n * 3600;
-      case 'd': return n * 86400;
-      default:  return AuthService.SESSION_REVOKE_TTL;
+      case 's':
+        return n;
+      case 'm':
+        return n * 60;
+      case 'h':
+        return n * 3600;
+      case 'd':
+        return n * 86400;
+      default:
+        return AuthService.SESSION_REVOKE_TTL;
     }
   }
 
@@ -62,6 +65,7 @@ export class AuthService {
     private readonly config: AppConfigService,
     private readonly cache: CacheService,
     private readonly audit: AuditService,
+    private readonly authzAdmin: AuthzAdminService,
     @Inject(EMPLOYEE_REPOSITORY) private readonly employeeRepo: IEmployeeRepository,
     @Inject(REFRESH_TOKEN_REPOSITORY) private readonly refreshTokenRepo: IRefreshTokenRepository,
   ) {}
@@ -96,9 +100,7 @@ export class AuthService {
       );
     }
 
-    const jwksUrl = new URL(
-      `https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`,
-    );
+    const jwksUrl = new URL(`https://login.microsoftonline.com/${tenantId}/discovery/v2.0/keys`);
     const JWKS = createRemoteJWKSet(jwksUrl);
 
     let claims: Record<string, unknown>;
@@ -112,11 +114,16 @@ export class AuthService {
       });
       claims = payload;
     } catch {
-      throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Invalid Entra ID token');
+      throw new UnauthorizedException(
+        ErrorCodes.AUTH_INVALID_CREDENTIALS,
+        'Invalid Entra ID token',
+      );
     }
 
     const oid = claims['oid'] as string | undefined;
-    const email = (claims['preferred_username'] ?? claims['email'] ?? claims['upn']) as string | undefined;
+    const email = (claims['preferred_username'] ?? claims['email'] ?? claims['upn']) as
+      | string
+      | undefined;
     const displayName = claims['name'] as string | undefined;
     // Entra App Roles claim — populated when the user is assigned roles in the app registration.
     // Falls back to ['employee'] so first-time SSO users always get at least read access.
@@ -125,19 +132,30 @@ export class AuthService {
       : ['employee'];
 
     if (!oid || !email) {
-      throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Token missing oid or email claim');
+      throw new UnauthorizedException(
+        ErrorCodes.AUTH_INVALID_CREDENTIALS,
+        'Token missing oid or email claim',
+      );
     }
 
     const employee = await this.employeeRepo.upsertByEntraOid(oid, {
       email: email.toLowerCase(),
       displayName: displayName ?? email.split('@')[0],
-      // Sync roles from Entra on every login — if IT removes a role in Entra portal,
-      // it takes effect at the user's next sign-in without any OpsHub admin action.
-      roles: entraRoles,
     });
 
     this.#assertActive(employee);
-    const result = await this.#mintTokens(employee, randomUUID());
+
+    // Reconcile the user's RBAC role assignments (the source of truth that
+    // PolicyGuard reads) to match the Entra App Roles claim. Unknown role keys
+    // are ignored (fail-safe). This also refreshes employees.roles for the JWT.
+    // Effect: if IT changes a user's App Role in Entra, it applies at next login
+    // with no OpsHub admin action.
+    const effectiveRoles = await this.authzAdmin.syncUserRolesByKeys(employee.id, entraRoles, {
+      sub: employee.id,
+      email: employee.email,
+    });
+
+    const result = await this.#mintTokens({ ...employee, roles: effectiveRoles }, randomUUID());
 
     await this.audit.record({
       actorId: employee.id,
@@ -175,7 +193,10 @@ export class AuthService {
         resourceId: stored.familyId,
         metadata: { familyId: stored.familyId },
       });
-      throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Refresh token reuse detected');
+      throw new UnauthorizedException(
+        ErrorCodes.AUTH_INVALID_CREDENTIALS,
+        'Refresh token reuse detected',
+      );
     }
 
     if (stored.expiresAt < new Date()) {
@@ -207,11 +228,7 @@ export class AuthService {
       ? Math.max(1, accessTokenExp - Math.floor(Date.now() / 1000))
       : AuthService.SESSION_REVOKE_TTL;
 
-    await this.cache.set(
-      `revoked:session:${stored.id}`,
-      '1',
-      ttlSeconds,
-    );
+    await this.cache.set(`revoked:session:${stored.id}`, '1', ttlSeconds);
 
     await this.audit.record({
       actorId: stored.employeeId,
@@ -256,9 +273,7 @@ export class AuthService {
 
     // Derive expiresIn from the actual JWT config so the frontend knows the real
     // token lifetime (e.g. 8h = 28800s) instead of a hardcoded 15-min constant.
-    const expiresIn = AuthService.parseExpiryToSeconds(
-      this.config.get('JWT_ACCESS_EXPIRY'),
-    );
+    const expiresIn = AuthService.parseExpiryToSeconds(this.config.get('JWT_ACCESS_EXPIRY'));
 
     return { accessToken, expiresIn, rawRefreshToken };
   }

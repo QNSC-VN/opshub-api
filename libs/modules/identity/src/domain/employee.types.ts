@@ -24,6 +24,11 @@ export interface CreateEmployeeInput {
   department?: string | null;
   jobTitle?: string | null;
   managerId?: string | null;
+  /**
+   * Only set by the Entra SSO JIT-provisioning path (roles from the token's
+   * App Role claim). The directory/employee HTTP endpoints never set this —
+   * role assignment is governed by the authz module.
+   */
   roles?: string[];
   entraOid?: string | null;
 }
@@ -33,7 +38,6 @@ export interface UpdateEmployeeInput {
   department?: string | null;
   jobTitle?: string | null;
   managerId?: string | null;
-  roles?: string[];
 }
 
 export interface EmployeeFilters {

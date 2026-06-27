@@ -1,8 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import {
-  ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
 } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, CurrentUser } from '@platform';
+import { Auth, RequirePermission, ApiCommonErrors, CurrentUser, AuthzService } from '@platform';
 import type { JwtPayload } from '@platform';
 import { CatalogService } from '../../application/catalog.service';
 import type { CatalogItem } from '../../domain/catalog.types';
@@ -31,7 +35,10 @@ function toDto(c: CatalogItem): CatalogItemResponseDto {
 @ApiTags('catalog')
 @Controller('catalog')
 export class CatalogController {
-  constructor(private readonly catalogService: CatalogService) {}
+  constructor(
+    private readonly catalogService: CatalogService,
+    private readonly authz: AuthzService,
+  ) {}
 
   @Get()
   @Auth()
@@ -42,12 +49,14 @@ export class CatalogController {
     @Query('includeInactive') includeInactive?: string,
     @CurrentUser() user?: JwtPayload,
   ): Promise<CatalogItemResponseDto[]> {
-    const showAll = includeInactive === 'true' && user?.roles?.includes('it-admin');
+    // Only catalog managers may see inactive items.
+    const showAll =
+      includeInactive === 'true' && !!user && (await this.authz.check(user.sub, 'catalog.manage'));
     return (await this.catalogService.listItems(showAll)).map(toDto);
   }
 
   @Post()
-  @Auth('it-admin')
+  @RequirePermission('catalog.manage')
   @ApiOperation({ summary: 'Create a catalog item (admin)' })
   @ApiCreatedResponse({ type: CatalogItemResponseDto })
   @ApiCommonErrors(400, 401, 403)
@@ -68,7 +77,7 @@ export class CatalogController {
   }
 
   @Patch(':id')
-  @Auth('it-admin')
+  @RequirePermission('catalog.manage')
   @ApiOperation({ summary: 'Update a catalog item' })
   @ApiOkResponse({ type: CatalogItemResponseDto })
   @ApiCommonErrors(400, 401, 403, 404)
@@ -77,11 +86,13 @@ export class CatalogController {
     @Body() dto: UpdateCatalogItemDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<CatalogItemResponseDto> {
-    return toDto(await this.catalogService.updateItem(id, dto, { sub: user.sub, email: user.email }));
+    return toDto(
+      await this.catalogService.updateItem(id, dto, { sub: user.sub, email: user.email }),
+    );
   }
 
   @Delete(':id')
-  @Auth('it-admin')
+  @RequirePermission('catalog.manage')
   @ApiOperation({ summary: 'Delete a catalog item' })
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404)

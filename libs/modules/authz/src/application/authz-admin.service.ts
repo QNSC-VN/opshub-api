@@ -1,5 +1,11 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { AuthzService, ConflictException, NotFoundException, ValidationException } from '@platform';
+import {
+  AuthzService,
+  ConflictException,
+  NotFoundException,
+  PermissionDeniedException,
+  ValidationException,
+} from '@platform';
 import type { Permission, RoleAssignment, RoleWithPermissions, ScopeType } from '@platform';
 import { AuditService } from '@modules/audit';
 import {
@@ -98,7 +104,10 @@ export class AuthzAdminService {
   async deleteRole(roleId: string, actor: Actor): Promise<void> {
     const role = await this.getRole(roleId);
     if (role.system) {
-      throw new ValidationException('ROLE_IMMUTABLE', `System role '${role.key}' cannot be deleted`);
+      throw new ValidationException(
+        'ROLE_IMMUTABLE',
+        `System role '${role.key}' cannot be deleted`,
+      );
     }
     await this.roleRepo.delete(roleId);
     await this.audit.record({
@@ -121,8 +130,15 @@ export class AuthzAdminService {
     const role = await this.roleRepo.findById(command.roleId);
     if (!role) throw new NotFoundException('ROLE_NOT_FOUND', `Role ${command.roleId} not found`);
 
+    // Privilege-escalation guard (NIST AC-6 least privilege): an actor may only
+    // grant a role whose permission set is a subset of their own. This prevents,
+    // e.g., an HR/role.assign holder from granting themselves or others the
+    // `admin` (`*`) role. Holders of `*` (platform admins) can grant anything.
+    await this.assertCanGrantRole(actor, role);
+
     const scopeType = command.scopeType ?? 'global';
-    const scopeId = scopeType === 'global' || scopeType === 'self' ? null : (command.scopeId ?? null);
+    const scopeId =
+      scopeType === 'global' || scopeType === 'self' ? null : (command.scopeId ?? null);
     if (scopeType !== 'global' && scopeType !== 'self' && !scopeId) {
       throw new ValidationException(
         'VALIDATION_FAILED',
@@ -139,6 +155,9 @@ export class AuthzAdminService {
       expiresAt: command.expiresAt ?? null,
     });
 
+    // Keep the JWT roles[] claim cache in sync with the RBAC source of truth,
+    // then bust the permission cache so enforcement is immediate.
+    await this.assignmentRepo.syncEmployeeRoleClaims(command.userId);
     await this.authz.invalidate(command.userId);
     await this.audit.record({
       actorId: actor.sub,
@@ -157,12 +176,73 @@ export class AuthzAdminService {
     return assignment;
   }
 
+  /**
+   * Reconcile a user's GLOBAL role assignments to exactly match `roleKeys`
+   * (grant missing, revoke extra), then refresh the JWT claim cache and
+   * permission cache. This is the single mechanism by which external identity
+   * providers (Entra App Roles) become OpsHub permissions — the assignments
+   * table stays the source of truth, and `employees.roles` is derived from it.
+   *
+   * Unknown role keys are ignored (fail-safe: an unmapped Entra role never
+   * grants access). Scoped (non-global) assignments are left untouched.
+   * This bypasses the interactive escalation guard by design: it runs as the
+   * system during SSO provisioning, mirroring what the IdP already asserts.
+   */
+  async syncUserRolesByKeys(userId: string, roleKeys: string[], actor: Actor): Promise<string[]> {
+    const allRoles = await this.roleRepo.list();
+    const idByKey = new Map(allRoles.map((r) => [r.key, r.id]));
+    const keyById = new Map(allRoles.map((r) => [r.id, r.key]));
+
+    const desiredRoleIds = new Set(
+      roleKeys.map((k) => idByKey.get(k)).filter((id): id is string => !!id),
+    );
+
+    const current = await this.assignmentRepo.listForUser(userId);
+    const currentGlobal = current.filter((a) => a.scopeType === 'global');
+    const currentRoleIds = new Set(currentGlobal.map((a) => a.roleId));
+
+    // Grant desired roles that are missing
+    for (const roleId of desiredRoleIds) {
+      if (!currentRoleIds.has(roleId)) {
+        await this.assignmentRepo.assign({
+          userId,
+          roleId,
+          scopeType: 'global',
+          scopeId: null,
+          grantedBy: actor.sub,
+          expiresAt: null,
+        });
+      }
+    }
+    // Revoke global roles no longer desired
+    for (const a of currentGlobal) {
+      if (!desiredRoleIds.has(a.roleId)) {
+        await this.assignmentRepo.revoke(a.id);
+      }
+    }
+
+    const finalKeys = await this.assignmentRepo.syncEmployeeRoleClaims(userId);
+    await this.authz.invalidate(userId);
+
+    const granted = [...desiredRoleIds].map((id) => keyById.get(id)).filter(Boolean);
+    await this.audit.record({
+      actorId: actor.sub,
+      actorEmail: actor.email,
+      action: 'authz.role.synced',
+      resourceType: 'employee',
+      resourceId: userId,
+      metadata: { requestedKeys: roleKeys, appliedRoles: granted, effectiveClaims: finalKeys },
+    });
+    return finalKeys;
+  }
+
   async revokeAssignment(id: string, actor: Actor): Promise<void> {
     const assignment = await this.assignmentRepo.findById(id);
     if (!assignment) {
       throw new NotFoundException('ROLE_ASSIGNMENT_NOT_FOUND', `Assignment ${id} not found`);
     }
     await this.assignmentRepo.revoke(id);
+    await this.assignmentRepo.syncEmployeeRoleClaims(assignment.userId);
     await this.authz.invalidate(assignment.userId);
     await this.audit.record({
       actorId: actor.sub,
@@ -175,6 +255,25 @@ export class AuthzAdminService {
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Enforce no-privilege-escalation: the actor must already hold every
+   * permission carried by the role they are granting. Platform admins (holders
+   * of the `*` wildcard) can grant any role. Fails closed.
+   */
+  private async assertCanGrantRole(actor: Actor, role: RoleWithPermissions): Promise<void> {
+    const effective = await this.authz.resolve(actor.sub);
+    const actorPerms = new Set(Object.keys(effective));
+    if (actorPerms.has('*')) return; // platform admin — may grant anything
+
+    // Granting a role that itself carries `*` requires the actor to be `*`.
+    const missing = role.permissions.filter((p) => !actorPerms.has(p));
+    if (missing.length > 0) {
+      throw new PermissionDeniedException(
+        `Cannot grant role '${role.key}': it includes permissions you do not hold (${missing.join(', ')}).`,
+      );
+    }
+  }
 
   private async assertPermissionsExist(keys: string[]): Promise<void> {
     if (keys.length === 0) return;

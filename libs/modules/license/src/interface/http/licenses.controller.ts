@@ -1,13 +1,26 @@
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import {
-  Body, Controller, Delete, Get, Param, Patch, Post, Query,
-} from '@nestjs/common';
-import {
-  ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags,
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
 } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser, RateLimit } from '@platform';
+import {
+  RequirePermission,
+  ApiCommonErrors,
+  ApiPagedResponse,
+  buildPageResult,
+  CurrentUser,
+  RateLimit,
+} from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { LicenseService } from '../../application/license.service';
-import type { SoftwareLicense, LicenseAssignment, LicenseUtilization } from '../../domain/license.types';
+import type {
+  SoftwareLicense,
+  LicenseAssignment,
+  LicenseUtilization,
+} from '../../domain/license.types';
 import {
   CreateLicenseDto,
   UpdateLicenseDto,
@@ -66,7 +79,7 @@ export class LicensesController {
   constructor(private readonly licenseService: LicenseService) {}
 
   @Get()
-  @Auth('it-admin', 'security', 'auditor')
+  @RequirePermission('license.read')
   @RateLimit('STRICT')
   @ApiOperation({ summary: 'List software licenses' })
   @ApiPagedResponse(LicenseResponseDto)
@@ -81,7 +94,7 @@ export class LicensesController {
   }
 
   @Post()
-  @Auth('it-admin')
+  @RequirePermission('license.manage')
   @RateLimit('STRICT')
   @ApiOperation({ summary: 'Create a software license record' })
   @ApiCreatedResponse({ type: LicenseResponseDto })
@@ -108,7 +121,7 @@ export class LicensesController {
   }
 
   @Get('utilization')
-  @Auth('it-admin', 'security', 'auditor')
+  @RequirePermission('license.read')
   @ApiOperation({ summary: 'Seat utilization and monthly spend across all licenses' })
   @ApiOkResponse({ type: LicenseUtilizationDto, isArray: true })
   @ApiCommonErrors(401, 403)
@@ -117,7 +130,7 @@ export class LicensesController {
   }
 
   @Get(':id')
-  @Auth('it-admin', 'security', 'auditor')
+  @RequirePermission('license.read')
   @ApiOperation({ summary: 'Get a license by id' })
   @ApiOkResponse({ type: LicenseResponseDto })
   @ApiCommonErrors(401, 403, 404)
@@ -126,7 +139,7 @@ export class LicensesController {
   }
 
   @Patch(':id')
-  @Auth('it-admin')
+  @RequirePermission('license.manage')
   @ApiOperation({ summary: 'Update a license record' })
   @ApiOkResponse({ type: LicenseResponseDto })
   @ApiCommonErrors(400, 401, 403, 404)
@@ -135,23 +148,22 @@ export class LicensesController {
     @Body() dto: UpdateLicenseDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<LicenseResponseDto> {
-    return toLicenseDto(await this.licenseService.update(id, dto, { sub: user.sub, email: user.email }));
+    return toLicenseDto(
+      await this.licenseService.update(id, dto, { sub: user.sub, email: user.email }),
+    );
   }
 
   @Delete(':id')
-  @Auth('it-admin')
+  @RequirePermission('license.manage')
   @ApiOperation({ summary: 'Delete a license (no active seats allowed)' })
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404, 409)
-  async delete(
-    @Param('id') id: string,
-    @CurrentUser() user: JwtPayload,
-  ): Promise<void> {
+  async delete(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
     await this.licenseService.delete(id, { sub: user.sub, email: user.email });
   }
 
   @Get(':id/assignments')
-  @Auth('it-admin', 'auditor')
+  @RequirePermission('license.read')
   @ApiOperation({ summary: 'List seat assignments for a license' })
   @ApiOkResponse({ type: LicenseAssignmentResponseDto, isArray: true })
   @ApiCommonErrors(401, 403, 404)
@@ -159,11 +171,13 @@ export class LicensesController {
     @Param('id') id: string,
     @Query() query: ListAssignmentsQueryDto,
   ): Promise<LicenseAssignmentResponseDto[]> {
-    return (await this.licenseService.listAssignments(id, query.includeRevoked)).map(toAssignmentDto);
+    return (await this.licenseService.listAssignments(id, query.includeRevoked)).map(
+      toAssignmentDto,
+    );
   }
 
   @Post(':id/assignments')
-  @Auth('it-admin')
+  @RequirePermission('license.manage')
   @ApiOperation({ summary: 'Assign a seat to an employee' })
   @ApiCreatedResponse({ type: LicenseAssignmentResponseDto })
   @ApiCommonErrors(400, 401, 403, 404, 409)
@@ -181,7 +195,7 @@ export class LicensesController {
   }
 
   @Delete('assignments/:assignmentId')
-  @Auth('it-admin')
+  @RequirePermission('license.manage')
   @ApiOperation({ summary: 'Revoke a seat assignment' })
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404)

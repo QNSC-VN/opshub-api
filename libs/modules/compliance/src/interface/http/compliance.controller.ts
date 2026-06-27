@@ -1,6 +1,13 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Auth, RequirePermission, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
+import {
+  Auth,
+  RequirePermission,
+  ApiCommonErrors,
+  ApiPagedResponse,
+  buildPageResult,
+  CurrentUser,
+} from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { AuditService } from '@modules/audit';
 import { ComplianceService } from '../../application/compliance.service';
@@ -82,7 +89,7 @@ export class ComplianceController {
   }
 
   @Post('software')
-  @Auth('it-admin', 'security')
+  @RequirePermission('compliance.manage')
   @ApiOperation({ summary: 'Add a software catalog entry' })
   @ApiCreatedResponse({ type: SoftwareResponseDto })
   @ApiCommonErrors(401, 403, 409, 422)
@@ -103,7 +110,7 @@ export class ComplianceController {
   }
 
   @Patch('software/:id')
-  @Auth('it-admin', 'security')
+  @RequirePermission('compliance.manage')
   @ApiOperation({ summary: 'Update a software catalog entry' })
   @ApiOkResponse({ type: SoftwareResponseDto })
   @ApiCommonErrors(401, 403, 404, 422)
@@ -127,7 +134,7 @@ export class ComplianceController {
   // ── Findings ───────────────────────────────────────────────────────────────
 
   @Get('findings')
-  @Auth('it-admin', 'security')
+  @RequirePermission('compliance.read')
   @ApiOperation({ summary: 'List compliance findings' })
   @ApiPagedResponse(FindingResponseDto)
   @ApiCommonErrors(401, 403)
@@ -148,7 +155,7 @@ export class ComplianceController {
   }
 
   @Get('findings/:id')
-  @Auth('it-admin', 'security')
+  @RequirePermission('compliance.read')
   @ApiOperation({ summary: 'Get a compliance finding' })
   @ApiOkResponse({ type: FindingResponseDto })
   @ApiCommonErrors(401, 403, 404)
@@ -157,7 +164,7 @@ export class ComplianceController {
   }
 
   @Post('findings/:id/acknowledge')
-  @Auth('it-admin', 'security')
+  @RequirePermission('compliance.manage')
   @ApiOperation({ summary: 'Acknowledge an open finding' })
   @ApiOkResponse({ type: FindingResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
@@ -177,7 +184,7 @@ export class ComplianceController {
   }
 
   @Post('findings/:id/resolve')
-  @Auth('it-admin', 'security')
+  @RequirePermission('compliance.manage')
   @ApiOperation({ summary: 'Resolve (or risk-accept) a finding' })
   @ApiOkResponse({ type: FindingResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
@@ -202,7 +209,9 @@ export class ComplianceController {
 
   @Get('shadow-it')
   @RequirePermission('compliance.read')
-  @ApiOperation({ summary: 'List Shadow IT findings (non-whitelisted apps detected on managed devices)' })
+  @ApiOperation({
+    summary: 'List Shadow IT findings (non-whitelisted apps detected on managed devices)',
+  })
   @ApiCommonErrors(401, 403)
   async listShadowIt() {
     const findings = await this.shadowIt.listShadowItFindings(100);

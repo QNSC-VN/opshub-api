@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, or } from 'drizzle-orm';
 import { InjectDrizzle, type DrizzleDB } from '@platform';
 import type { RoleAssignment } from '@platform';
 import { newId } from '@shared-kernel';
-import { userRoleAssignments } from '../../../../../../db/schema';
+import { employees, roles as rolesTable, userRoleAssignments } from '../../../../../../db/schema';
 import type {
   AssignRoleInput,
   IRoleAssignmentRepository,
@@ -87,5 +87,25 @@ export class RoleAssignmentDrizzleRepository implements IRoleAssignmentRepositor
 
   async revoke(id: string): Promise<void> {
     await this.db.delete(userRoleAssignments).where(eq(userRoleAssignments.id, id));
+  }
+
+  async syncEmployeeRoleClaims(userId: string): Promise<string[]> {
+    // Distinct active (non-expired) role keys for this user.
+    const rows = await this.db
+      .selectDistinct({ key: rolesTable.key })
+      .from(userRoleAssignments)
+      .innerJoin(rolesTable, eq(rolesTable.id, userRoleAssignments.roleId))
+      .where(
+        and(
+          eq(userRoleAssignments.userId, userId),
+          or(isNull(userRoleAssignments.expiresAt), gt(userRoleAssignments.expiresAt, new Date())),
+        ),
+      );
+    const keys = rows.map((r) => r.key).sort();
+    await this.db
+      .update(employees)
+      .set({ roles: keys, updatedAt: new Date() })
+      .where(eq(employees.id, userId));
+    return keys;
   }
 }

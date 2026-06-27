@@ -1,6 +1,13 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import { Auth, RequirePermission, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
+import {
+  Auth,
+  RequirePermission,
+  ApiCommonErrors,
+  ApiPagedResponse,
+  buildPageResult,
+  CurrentUser,
+} from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { EmployeeService } from '@modules/identity';
 import { AuditService } from '@modules/audit';
@@ -154,7 +161,7 @@ export class WorkforceController {
   }
 
   @Post('timesheets/:id/review')
-  @Auth('manager', 'hr')
+  @RequirePermission('workforce.approve')
   @ApiOperation({ summary: 'Approve or reject a timesheet' })
   @ApiCommonErrors(401, 403, 404, 412)
   async reviewTimesheet(
@@ -209,7 +216,7 @@ export class WorkforceController {
   }
 
   @Post('leave/:id/review')
-  @Auth('manager', 'hr')
+  @RequirePermission('workforce.approve')
   @ApiOperation({ summary: 'Approve or reject a leave request' })
   @ApiCommonErrors(401, 403, 404, 412)
   async reviewLeave(
@@ -285,7 +292,7 @@ export class WorkforceController {
   }
 
   @Post('overtime/:id/review')
-  @Auth('manager', 'hr')
+  @RequirePermission('workforce.approve')
   @ApiOperation({ summary: 'Approve or reject an overtime entry' })
   @ApiCommonErrors(401, 403, 404, 412)
   async reviewOvertime(
@@ -401,8 +408,21 @@ export class WorkforceController {
 
   @Post('leave-requests/:id/document/presign')
   @Auth()
-  @ApiOperation({ summary: 'Get a presigned S3 PUT URL to upload a leave supporting document (e.g. medical certificate)' })
-  @ApiResponse({ status: 200, schema: { properties: { fileId: { type: 'string' }, uploadUrl: { type: 'string' }, key: { type: 'string' } }, required: ['fileId', 'uploadUrl', 'key'] } })
+  @ApiOperation({
+    summary:
+      'Get a presigned S3 PUT URL to upload a leave supporting document (e.g. medical certificate)',
+  })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      properties: {
+        fileId: { type: 'string' },
+        uploadUrl: { type: 'string' },
+        key: { type: 'string' },
+      },
+      required: ['fileId', 'uploadUrl', 'key'],
+    },
+  })
   @ApiCommonErrors(401, 404, 422)
   async presignLeaveDocument(
     @Param('id') id: string,
@@ -415,7 +435,10 @@ export class WorkforceController {
   @Post('leave-requests/:id/document/confirm')
   @Auth()
   @ApiOperation({ summary: 'Confirm leave document upload completed' })
-  @ApiResponse({ status: 200, schema: { properties: { documentUrl: { type: 'string' } }, required: ['documentUrl'] } })
+  @ApiResponse({
+    status: 200,
+    schema: { properties: { documentUrl: { type: 'string' } }, required: ['documentUrl'] },
+  })
   @ApiCommonErrors(401, 404, 422)
   async confirmLeaveDocument(
     @Param('id') id: string,
@@ -428,7 +451,13 @@ export class WorkforceController {
   @Get('leave-requests/:id/document')
   @Auth()
   @ApiOperation({ summary: 'Get a time-limited download URL for the leave supporting document' })
-  @ApiResponse({ status: 200, schema: { properties: { documentUrl: { type: 'string', nullable: true } }, required: ['documentUrl'] } })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      properties: { documentUrl: { type: 'string', nullable: true } },
+      required: ['documentUrl'],
+    },
+  })
   @ApiCommonErrors(401, 404)
   async getLeaveDocumentUrl(@Param('id') id: string) {
     return this.service.getLeaveDocumentUrl(id);

@@ -28,4 +28,10 @@ export class MeResponseDto {
   email!: string;
   name!: string;
   roles!: string[];
+  /**
+   * Effective permission keys resolved from the user's role assignments (DB).
+   * `'*'` means super-admin (all permissions). This is the single source of
+   * truth the SPA uses to gate UI — it must never re-derive permissions itself.
+   */
+  permissions!: string[];
 }

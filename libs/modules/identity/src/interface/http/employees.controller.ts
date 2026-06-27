@@ -1,6 +1,31 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from '@nestjs/common';
-import { ApiNoContentResponse, ApiOkResponse, ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, ApiPagedResponse, CurrentUser, buildPageResult, RateLimit } from '@platform';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiCreatedResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import {
+  Auth,
+  RequirePermission,
+  ApiCommonErrors,
+  ApiPagedResponse,
+  CurrentUser,
+  buildPageResult,
+  RateLimit,
+} from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { AuditService } from '@modules/audit';
 import { EmployeeService } from '../../application/employee.service';
@@ -63,7 +88,7 @@ export class EmployeesController {
   }
 
   @Post()
-  @Auth('it-admin', 'hr')
+  @RequirePermission('employee.write')
   @ApiOperation({ summary: 'Create an employee record' })
   @ApiCreatedResponse({ type: EmployeeResponseDto })
   @ApiCommonErrors(401, 403, 409, 422)
@@ -84,8 +109,10 @@ export class EmployeesController {
   }
 
   @Patch(':id')
-  @Auth('it-admin', 'hr')
-  @ApiOperation({ summary: 'Update employee profile fields (display name, department, job title, roles)' })
+  @RequirePermission('employee.write')
+  @ApiOperation({
+    summary: 'Update employee profile fields (display name, department, job title, roles)',
+  })
   @ApiOkResponse({ type: EmployeeResponseDto })
   @ApiCommonErrors(401, 403, 404, 422)
   async update(
@@ -93,7 +120,10 @@ export class EmployeesController {
     @Body() dto: UpdateEmployeeDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<EmployeeResponseDto> {
-    const employee = await this.employeeService.update(id, dto, { sub: user.sub, email: user.email });
+    const employee = await this.employeeService.update(id, dto, {
+      sub: user.sub,
+      email: user.email,
+    });
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
@@ -106,8 +136,10 @@ export class EmployeesController {
   }
 
   @Patch(':id/status')
-  @Auth('it-admin', 'hr')
-  @ApiOperation({ summary: 'Change employee status — offboarding immediately revokes all active sessions' })
+  @RequirePermission('employee.write')
+  @ApiOperation({
+    summary: 'Change employee status — offboarding immediately revokes all active sessions',
+  })
   @ApiOkResponse({ type: EmployeeResponseDto })
   @ApiCommonErrors(401, 403, 404, 422)
   async updateStatus(
@@ -115,7 +147,10 @@ export class EmployeesController {
     @Body() dto: UpdateStatusDto,
     @CurrentUser() user: JwtPayload,
   ): Promise<EmployeeResponseDto> {
-    const employee = await this.employeeService.updateStatus(id, dto.status, { sub: user.sub, email: user.email });
+    const employee = await this.employeeService.updateStatus(id, dto.status, {
+      sub: user.sub,
+      email: user.email,
+    });
     void this.audit.record({
       actorId: user.sub,
       actorEmail: user.email,
@@ -132,7 +167,16 @@ export class EmployeesController {
   @Post(':id/avatar/presign')
   @Auth()
   @ApiOperation({ summary: 'Get a presigned S3 PUT URL to upload an employee avatar' })
-  @ApiOkResponse({ schema: { properties: { fileId: { type: 'string' }, uploadUrl: { type: 'string' }, key: { type: 'string' } }, required: ['fileId', 'uploadUrl', 'key'] } })
+  @ApiOkResponse({
+    schema: {
+      properties: {
+        fileId: { type: 'string' },
+        uploadUrl: { type: 'string' },
+        key: { type: 'string' },
+      },
+      required: ['fileId', 'uploadUrl', 'key'],
+    },
+  })
   @ApiCommonErrors(401, 403, 404, 422)
   async presignAvatar(
     @Param('id') id: string,
@@ -145,7 +189,9 @@ export class EmployeesController {
   @Post(':id/avatar/confirm')
   @Auth()
   @ApiOperation({ summary: 'Confirm avatar upload completed — links the photo to the employee' })
-  @ApiOkResponse({ schema: { properties: { avatarUrl: { type: 'string' } }, required: ['avatarUrl'] } })
+  @ApiOkResponse({
+    schema: { properties: { avatarUrl: { type: 'string' } }, required: ['avatarUrl'] },
+  })
   @ApiCommonErrors(401, 403, 404, 422)
   async confirmAvatar(
     @Param('id') id: string,
@@ -158,14 +204,19 @@ export class EmployeesController {
   @Get(':id/avatar')
   @Auth()
   @ApiOperation({ summary: 'Get a time-limited download URL for the employee avatar' })
-  @ApiOkResponse({ schema: { properties: { avatarUrl: { type: 'string', nullable: true } }, required: ['avatarUrl'] } })
+  @ApiOkResponse({
+    schema: {
+      properties: { avatarUrl: { type: 'string', nullable: true } },
+      required: ['avatarUrl'],
+    },
+  })
   @ApiCommonErrors(401, 404)
   async getAvatarUrl(@Param('id') id: string) {
     return this.employeeService.getAvatarUrl(id);
   }
 
   @Delete(':id/avatar')
-  @Auth('it-admin', 'hr')
+  @RequirePermission('employee.write')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete the employee avatar' })
   @ApiNoContentResponse()

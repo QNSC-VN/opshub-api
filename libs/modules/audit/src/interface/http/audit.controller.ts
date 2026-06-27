@@ -1,6 +1,12 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult, RateLimit } from '@platform';
+import {
+  RequirePermission,
+  ApiCommonErrors,
+  ApiPagedResponse,
+  buildPageResult,
+  RateLimit,
+} from '@platform';
 import type { PagedResult } from '@platform';
 import { AuditService } from '../../application/audit.service';
 import { AuditQueryDto, AuditLogResponseDto } from './dto/audit.dto';
@@ -22,7 +28,7 @@ function toDto(a: AuditLog): AuditLogResponseDto {
 
 @ApiTags('audit')
 @Controller('audit-logs')
-@Auth('it-admin', 'security')
+@RequirePermission('audit.read')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 

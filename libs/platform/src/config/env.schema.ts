@@ -79,6 +79,12 @@ export const EnvSchema = z.object({
   VALKEY_URL: z.string().optional(),
   REDIS_KEY_PREFIX: z.string().default('opshub:'),
 
+  // ── AI assistant (optional) ────────────────────────────────────────────────
+  // When ANTHROPIC_API_KEY is unset the AI module reports itself disabled
+  // (AiService.isEnabled()) and the /ai endpoints return 503.
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_MODEL: z.string().default('claude-opus-4-8'),
+
   // ── Email ──────────────────────────────────────────────────────────────────
   EMAIL_PROVIDER: z.enum(['dev', 'resend']).default('dev'),
   MAIL_FROM_NAME: z.string().default('OpsHub'),
