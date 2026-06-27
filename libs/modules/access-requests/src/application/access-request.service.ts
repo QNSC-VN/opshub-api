@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   InjectDrizzle,
   type DrizzleDB,
@@ -8,10 +8,9 @@ import {
   RequestEngine,
 } from '@platform';
 import { AuditService } from '@modules/audit';
-import { newId, MS_PER_HOUR, REQUEST_TYPE, ACCESS_TYPE } from '@shared-kernel';
+import { newId, MS_PER_HOUR } from '@shared-kernel';
 import { desc, eq } from 'drizzle-orm';
-import { accessGrants, accessRequests, employees } from '../../../../../db/schema';
-import { GraphPimService } from './graph-pim.service';
+import { accessGrants, accessRequests } from '../../../../../db/schema';
 import {
   ACCESS_REQUEST_REPOSITORY,
   type IAccessRequestRepository,
@@ -26,14 +25,11 @@ import type { AccessRequestPayload } from './access-request.type-def';
 
 @Injectable()
 export class AccessRequestService {
-  private readonly logger = new Logger(AccessRequestService.name);
-
   constructor(
     @Inject(ACCESS_REQUEST_REPOSITORY) private readonly repo: IAccessRequestRepository,
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly engine: RequestEngine,
     private readonly audit: AuditService,
-    private readonly graphPim: GraphPimService,
   ) {}
 
   async submit(
@@ -52,7 +48,7 @@ export class AccessRequestService {
       durationHours: input.durationHours,
     };
 
-    const engineItem = await this.engine.submit(REQUEST_TYPE.ACCESS_REQUEST, enginePayload, actor, {
+    const engineItem = await this.engine.submit('access_request', enginePayload, actor, {
       expiresAt: new Date(Date.now() + 168 * MS_PER_HOUR), // 7-day default engine window
     });
 
@@ -137,29 +133,7 @@ export class AccessRequestService {
       .orderBy(desc(accessGrants.grantedAt))
       .limit(1);
 
-    // For pim_role grants, attempt to elevate in Entra PIM (best-effort, config-guarded).
-    if (grantRow && request.accessType === ACCESS_TYPE.PIM_ROLE && this.graphPim.isEnabled()) {
-      const [employee] = await this.db
-        .select({ entraOid: employees.entraOid })
-        .from(employees)
-        .where(eq(employees.id, request.requesterId))
-        .limit(1);
-
-      if (employee?.entraOid) {
-        void this.graphPim.elevateRole(
-          employee.entraOid,
-          request.target,
-          grantRow.expiresAt,
-          request.justification,
-        ).catch((err: unknown) => {
-          this.logger.error(`PIM elevation fire-and-forget failed: ${String(err)}`);
-        });
-      } else {
-        this.logger.warn(`PIM elevation skipped: no Entra OID for employee ${request.requesterId}`);
-      }
-    }
-
-    return grantRow;
+    return grantRow as AccessGrant;
   }
 
   async reject(

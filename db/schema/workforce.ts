@@ -10,7 +10,6 @@ import {
   timestamp,
   integer,
   numeric,
-  boolean,
   index,
 } from 'drizzle-orm/pg-core';
 import {
@@ -102,29 +101,5 @@ export const shiftLogs = workforceSchema.table(
   (t) => ({
     employeeIdx: index('ix_shift_employee').on(t.employeeId, t.startsAt),
     typeIdx: index('ix_shift_type').on(t.shiftType, t.startsAt),
-  }),
-);
-
-/**
- * Real-time attendance — clock-in / clock-out per employee per day.
- * One open record (clockedOutAt IS NULL) at most per employee.
- */
-export const attendanceLogs = workforceSchema.table(
-  'attendance_logs',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    employeeId: uuid('employee_id').notNull(),
-    clockedInAt: timestamp('clocked_in_at', { withTimezone: true }).notNull(),
-    clockedOutAt: timestamp('clocked_out_at', { withTimezone: true }),
-    /** Computed on clock-out: (clockedOutAt - clockedInAt) in minutes */
-    durationMinutes: integer('duration_minutes'),
-    /** Attendance entry is remote / WFH */
-    isRemote: boolean('is_remote').notNull().default(false),
-    notes: varchar('notes', { length: 500 }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    employeeIdx: index('ix_attendance_employee').on(t.employeeId, t.clockedInAt),
   }),
 );

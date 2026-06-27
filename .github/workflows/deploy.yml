@@ -21,7 +21,7 @@
 #     ECS_MIGRATOR_TASK_DEF    e.g. opshub-develop-migrator
 #     ECS_MIGRATOR_SUBNET      private subnet ID (comma-separated if multiple)
 #     ECS_MIGRATOR_SG          security group allowing outbound to RDS
-#     APP_URL                  e.g. https://api-dev.opshub.qncs.io/v1/healthz
+#     APP_URL                  e.g. https://api-dev.opshub.qnsc.io/v1/healthz
 #
 #   Environment-scoped IAM roles (provisioned by opshub-infra):
 #     opshub-github-ecr-push        build-push job (ECR push, no deploy rights)
@@ -43,7 +43,7 @@ permissions:
   contents: read
 
 env:
-  GITOPS_SHA: 947bc9bd8e130065082f9a2e15e4f61cfbb736ca   # pin qncs-gitops to a known commit
+  GITOPS_SHA: 947bc9bd8e130065082f9a2e15e4f61cfbb736ca   # pin qnsc-gitops to a known commit
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────

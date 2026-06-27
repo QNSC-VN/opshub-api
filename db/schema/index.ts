@@ -14,6 +14,3 @@ export * from './audit';
 export * from './messaging';
 export * from './notifications';
 export * from './storage';
-export * from './licenses';
-export * from './catalog';
-export * from './security-posture';

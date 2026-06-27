@@ -14,9 +14,6 @@ import type {
   Timesheet,
   TimesheetFilters,
   TimesheetStatus,
-  AttendanceLog,
-  AttendanceFilters,
-  ClockInInput,
 } from '../workforce.types';
 
 export const WORKFORCE_REPOSITORY = Symbol('WORKFORCE_REPOSITORY');
@@ -83,14 +80,4 @@ export interface IWorkforceRepository {
     limit: number,
     offset: number,
   ): Promise<{ rows: ShiftLog[]; total: number }>;
-
-  // Attendance
-  clockIn(input: ClockInInput): Promise<AttendanceLog>;
-  clockOut(attendanceId: string, notes?: string | null): Promise<AttendanceLog | null>;
-  findOpenAttendance(employeeId: string): Promise<AttendanceLog | null>;
-  listAttendance(
-    filters: AttendanceFilters,
-    limit: number,
-    offset: number,
-  ): Promise<{ rows: AttendanceLog[]; total: number }>;
 }

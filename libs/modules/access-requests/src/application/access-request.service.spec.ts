@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AccessRequestService } from './access-request.service';
-import { NotFoundException } from '@platform';
+import { NotFoundException, PreconditionFailedException } from '@platform';
 
 const mockRepo = {
   findById:          vi.fn(),
@@ -26,7 +26,6 @@ const mockEngine = {
 };
 
 const mockAudit = { record: vi.fn() };
-const mockGraphPim = { isEnabled: vi.fn().mockReturnValue(false), elevateRole: vi.fn(), revokeRole: vi.fn() };
 
 const ACTOR = { sub: 'user-1', email: 'user@test.com' };
 const ADMIN = { sub: 'admin-1', email: 'admin@test.com' };
@@ -52,7 +51,6 @@ function makeService() {
     mockDb as never,
     mockEngine as never,
     mockAudit as never,
-    mockGraphPim as never,
   );
 }
 
@@ -106,8 +104,7 @@ describe('AccessRequestService.approve()', () => {
     const dbWithTx = { transaction: vi.fn((fn: (tx: unknown) => Promise<unknown>) => fn({})), select: vi.fn().mockReturnValue(selectBuilder), insert: vi.fn().mockReturnThis(), values: vi.fn().mockResolvedValue(undefined), update: vi.fn().mockReturnThis(), set: vi.fn().mockReturnThis(), where: vi.fn().mockResolvedValue(undefined) };
 
     // Build service with tx-capable db mock
-    const svc = new AccessRequestService(mockRepo as never, dbWithTx as never, mockEngine as never, mockAudit as never, mockGraphPim as never);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+    const svc = new AccessRequestService(mockRepo as never, dbWithTx as never, mockEngine as never, mockAudit as never);
     (svc as any)['db'] = dbWithTx;
 
     // approve() reads from db internally — mock relevant repo calls
