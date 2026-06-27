@@ -48,7 +48,7 @@ export class AuditDrizzleRepository implements IAuditRepository {
       .from(auditLogs)
       .where(where);
 
-    return { rows: rows as AuditLog[], total: count };
+    return { rows: rows, total: count };
   }
 
   async deleteOlderThan(before: Date): Promise<number> {

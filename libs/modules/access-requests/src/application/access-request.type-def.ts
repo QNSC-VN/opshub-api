@@ -7,7 +7,7 @@ import {
   type ApprovalStepDef,
   NotificationSchedulerService,
 } from '@platform';
-import { newId } from '@shared-kernel';
+import { newId, REQUEST_TYPE } from '@shared-kernel';
 import { accessRequests, accessGrants } from '../../../../../db/schema';
 
 export interface AccessRequestPayload extends Record<string, unknown> {
@@ -31,7 +31,7 @@ export interface AccessRequestPayload extends Record<string, unknown> {
 export class AccessRequestTypeDef
   implements RequestTypeDef<AccessRequestPayload>, OnModuleInit
 {
-  readonly type = 'access_request';
+  readonly type = REQUEST_TYPE.ACCESS_REQUEST;
   /**
    * Fallback for single-step mode (backward compat). When `approvalSteps` is
    * defined, the engine uses per-step permissions instead.

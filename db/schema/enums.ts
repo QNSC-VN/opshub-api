@@ -90,3 +90,15 @@ export const leaveStatusEnum = pgEnum('leave_status', [
 ]);
 export const overtimeStatusEnum = pgEnum('overtime_status', ['pending', 'approved', 'rejected']);
 export const shiftTypeEnum = pgEnum('shift_type', ['night', 'on_call', 'weekend']);
+
+// ── Software Licenses / FinOps ────────────────────────────────────────────────
+export const licenseTypeEnum = pgEnum('license_type', [
+  'perpetual',
+  'subscription',
+  'per_seat',
+  'concurrent',
+]);
+export const licenseStatusEnum = pgEnum('license_status', ['active', 'expiring_soon', 'expired', 'cancelled']);
+
+// ── Storage ──────────────────────────────────────────────────────────────────
+export const storedFileStatusEnum = pgEnum('stored_file_status', ['pending', 'completed', 'deleted']);

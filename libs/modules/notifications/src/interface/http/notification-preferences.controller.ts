@@ -8,7 +8,7 @@ import {
   Param,
   Put,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiTags, ApiOkResponse, ApiNoContentResponse } from '@nestjs/swagger';
 import { Auth, CurrentUser, type JwtPayload } from '@platform';
 import { NotificationPreferencesService } from '../../application/notification-preferences.service';
 import { UpsertPreferenceDto } from './dto/preference-request.dto';
@@ -22,9 +22,10 @@ export class NotificationPreferencesController {
 
   /** List all explicit notification preferences for the current user. */
   @Get()
+  @ApiOkResponse({ type: [PreferenceResponseDto] })
   async list(@CurrentUser() user: JwtPayload): Promise<PreferenceResponseDto[]> {
     const prefs = await this.service.listPreferences(user.sub);
-    return prefs.map(PreferenceResponseDto.fromDomain);
+    return prefs.map((p) => PreferenceResponseDto.fromDomain(p));
   }
 
   /**
@@ -32,6 +33,7 @@ export class NotificationPreferencesController {
    * Use type='*' to globally disable in-app or email notifications.
    */
   @Put(':type')
+  @ApiOkResponse({ type: PreferenceResponseDto })
   async upsert(
     @CurrentUser() user: JwtPayload,
     @Param('type') type: string,
@@ -49,6 +51,7 @@ export class NotificationPreferencesController {
   /** Reset a preference to default (re-enable both channels). */
   @Delete(':type')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse()
   reset(
     @CurrentUser() user: JwtPayload,
     @Param('type') type: string,

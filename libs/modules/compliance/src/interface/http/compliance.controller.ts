@@ -1,9 +1,10 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
+import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Auth, RequirePermission, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { AuditService } from '@modules/audit';
 import { ComplianceService } from '../../application/compliance.service';
+import { ShadowItDetectionService } from '../../application/shadow-it-detection.service';
 import {
   AddSoftwareDto,
   UpdateSoftwareDto,
@@ -50,6 +51,7 @@ export class ComplianceController {
   constructor(
     private readonly service: ComplianceService,
     private readonly audit: AuditService,
+    private readonly shadowIt: ShadowItDetectionService,
   ) {}
 
   // ── Software catalog ───────────────────────────────────────────────────────
@@ -73,6 +75,7 @@ export class ComplianceController {
   @Get('software/:id')
   @Auth()
   @ApiOperation({ summary: 'Get a software catalog entry' })
+  @ApiOkResponse({ type: SoftwareResponseDto })
   @ApiCommonErrors(401, 404)
   async getSoftware(@Param('id') id: string): Promise<SoftwareResponseDto> {
     return toSoftwareDto(await this.service.getSoftware(id));
@@ -81,6 +84,7 @@ export class ComplianceController {
   @Post('software')
   @Auth('it-admin', 'security')
   @ApiOperation({ summary: 'Add a software catalog entry' })
+  @ApiCreatedResponse({ type: SoftwareResponseDto })
   @ApiCommonErrors(401, 403, 409, 422)
   async addSoftware(
     @Body() dto: AddSoftwareDto,
@@ -101,6 +105,7 @@ export class ComplianceController {
   @Patch('software/:id')
   @Auth('it-admin', 'security')
   @ApiOperation({ summary: 'Update a software catalog entry' })
+  @ApiOkResponse({ type: SoftwareResponseDto })
   @ApiCommonErrors(401, 403, 404, 422)
   async updateSoftware(
     @Param('id') id: string,
@@ -114,7 +119,7 @@ export class ComplianceController {
       action: 'compliance.software_updated',
       resourceType: 'software_catalog',
       resourceId: id,
-      metadata: { changes: dto as Record<string, unknown> },
+      metadata: { changes: dto },
     });
     return toSoftwareDto(entry);
   }
@@ -145,6 +150,7 @@ export class ComplianceController {
   @Get('findings/:id')
   @Auth('it-admin', 'security')
   @ApiOperation({ summary: 'Get a compliance finding' })
+  @ApiOkResponse({ type: FindingResponseDto })
   @ApiCommonErrors(401, 403, 404)
   async getFinding(@Param('id') id: string): Promise<FindingResponseDto> {
     return toFindingDto(await this.service.getFinding(id));
@@ -153,6 +159,7 @@ export class ComplianceController {
   @Post('findings/:id/acknowledge')
   @Auth('it-admin', 'security')
   @ApiOperation({ summary: 'Acknowledge an open finding' })
+  @ApiOkResponse({ type: FindingResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
   async acknowledge(
     @Param('id') id: string,
@@ -172,6 +179,7 @@ export class ComplianceController {
   @Post('findings/:id/resolve')
   @Auth('it-admin', 'security')
   @ApiOperation({ summary: 'Resolve (or risk-accept) a finding' })
+  @ApiOkResponse({ type: FindingResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
   async resolve(
     @Param('id') id: string,
@@ -188,5 +196,33 @@ export class ComplianceController {
       metadata: { riskAccepted: dto.riskAccepted, note: dto.note ?? null },
     });
     return toFindingDto(finding);
+  }
+
+  // ── Shadow IT ──────────────────────────────────────────────────────────────
+
+  @Get('shadow-it')
+  @RequirePermission('compliance.read')
+  @ApiOperation({ summary: 'List Shadow IT findings (non-whitelisted apps detected on managed devices)' })
+  @ApiCommonErrors(401, 403)
+  async listShadowIt() {
+    const findings = await this.shadowIt.listShadowItFindings(100);
+    return { findings: findings.map(toFindingDto), total: findings.length };
+  }
+
+  @Post('shadow-it/scan')
+  @RequirePermission('compliance.manage')
+  @ApiOperation({ summary: 'Trigger an immediate Shadow IT detection scan' })
+  @ApiCommonErrors(401, 403)
+  async triggerShadowItScan(@CurrentUser() user: JwtPayload) {
+    const result = await this.shadowIt.detectShadowIt();
+    void this.audit.record({
+      actorId: user.sub,
+      actorEmail: user.email,
+      action: 'compliance.shadow_it_scan_triggered',
+      resourceType: 'compliance',
+      resourceId: 'shadow-it',
+      metadata: { scanned: result.scanned, newFindings: result.newFindings },
+    });
+    return result;
   }
 }

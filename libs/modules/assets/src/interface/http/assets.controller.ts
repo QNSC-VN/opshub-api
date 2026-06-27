@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
+import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser, RateLimit } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { AuditService } from '@modules/audit';
 import { AssetService } from '../../application/asset.service';
@@ -10,6 +10,8 @@ import {
   AssignAssetDto,
   AssetResponseDto,
   AssetAssignmentResponseDto,
+  PresignAssetPhotoDto,
+  ConfirmAssetPhotoDto,
 } from './dto/asset.dto';
 import type { Asset, AssetAssignment } from '../../domain/asset.types';
 
@@ -27,6 +29,7 @@ function toDto(a: Asset): AssetResponseDto {
     warrantyExpiry: a.warrantyExpiry,
     specs: a.specs,
     assignedTo: a.assignedTo,
+    photoStorageKey: a.photoStorageKey,
     createdAt: a.createdAt.toISOString(),
   };
 }
@@ -52,6 +55,7 @@ export class AssetsController {
 
   @Get()
   @Auth()
+  @RateLimit('STRICT')
   @ApiOperation({ summary: 'List hardware assets' })
   @ApiPagedResponse(AssetResponseDto)
   @ApiCommonErrors(401)
@@ -67,6 +71,7 @@ export class AssetsController {
   @Get(':id')
   @Auth()
   @ApiOperation({ summary: 'Get an asset by id' })
+  @ApiOkResponse({ type: AssetResponseDto })
   @ApiCommonErrors(401, 404)
   async getById(@Param('id') id: string): Promise<AssetResponseDto> {
     return toDto(await this.assetService.getById(id));
@@ -75,6 +80,7 @@ export class AssetsController {
   @Get(':id/assignments')
   @Auth()
   @ApiOperation({ summary: 'List the assignment history of an asset' })
+  @ApiOkResponse({ type: [AssetAssignmentResponseDto] })
   @ApiCommonErrors(401, 404)
   async assignments(@Param('id') id: string): Promise<AssetAssignmentResponseDto[]> {
     return (await this.assetService.listAssignments(id)).map(toAssignmentDto);
@@ -83,6 +89,7 @@ export class AssetsController {
   @Post()
   @Auth('it-admin')
   @ApiOperation({ summary: 'Register a new asset' })
+  @ApiCreatedResponse({ type: AssetResponseDto })
   @ApiCommonErrors(401, 403, 409, 422)
   async create(
     @Body() dto: CreateAssetDto,
@@ -103,6 +110,7 @@ export class AssetsController {
   @Post(':id/assign')
   @Auth('it-admin')
   @ApiOperation({ summary: 'Assign an asset to an employee' })
+  @ApiOkResponse({ type: AssetResponseDto })
   @ApiCommonErrors(401, 403, 404, 409, 412)
   async assign(
     @Param('id') id: string,
@@ -124,6 +132,7 @@ export class AssetsController {
   @Post(':id/unassign')
   @Auth('it-admin')
   @ApiOperation({ summary: 'Return an asset to stock' })
+  @ApiOkResponse({ type: AssetResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
   async unassign(
     @Param('id') id: string,
@@ -143,6 +152,7 @@ export class AssetsController {
   @Post(':id/retire')
   @Auth('it-admin')
   @ApiOperation({ summary: 'Retire an asset' })
+  @ApiOkResponse({ type: AssetResponseDto })
   @ApiCommonErrors(401, 403, 404)
   async retire(
     @Param('id') id: string,
@@ -157,5 +167,42 @@ export class AssetsController {
       resourceId: id,
     });
     return toDto(asset);
+  }
+
+  // ── Photo upload ──────────────────────────────────────────────────────────
+
+  @Post(':id/photo/presign')
+  @Auth('it-admin')
+  @ApiOperation({ summary: 'Get a presigned S3 PUT URL to upload an asset photo' })
+  @ApiOkResponse({ schema: { properties: { fileId: { type: 'string' }, uploadUrl: { type: 'string' }, key: { type: 'string' } }, required: ['fileId', 'uploadUrl', 'key'] } })
+  @ApiCommonErrors(401, 403, 404, 422)
+  async presignPhoto(
+    @Param('id') id: string,
+    @Body() dto: PresignAssetPhotoDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.assetService.presignPhoto(id, dto, { sub: user.sub, email: user.email });
+  }
+
+  @Post(':id/photo/confirm')
+  @Auth('it-admin')
+  @ApiOperation({ summary: 'Confirm asset photo upload completed' })
+  @ApiOkResponse({ schema: { properties: { photoUrl: { type: 'string' } }, required: ['photoUrl'] } })
+  @ApiCommonErrors(401, 403, 404, 422)
+  async confirmPhoto(
+    @Param('id') id: string,
+    @Body() dto: ConfirmAssetPhotoDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.assetService.confirmPhoto(id, dto.fileId, { sub: user.sub, email: user.email });
+  }
+
+  @Get(':id/photo')
+  @Auth()
+  @ApiOperation({ summary: 'Get a time-limited download URL for the asset photo' })
+  @ApiOkResponse({ schema: { properties: { photoUrl: { type: 'string', nullable: true } }, required: ['photoUrl'] } })
+  @ApiCommonErrors(401, 404)
+  async getPhotoUrl(@Param('id') id: string) {
+    return this.assetService.getPhotoUrl(id);
   }
 }

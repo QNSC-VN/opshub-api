@@ -7,7 +7,6 @@ import {
   NotFoundException,
   PreconditionFailedException,
   PermissionDeniedException,
-  ConflictException,
 } from '../errors/exceptions';
 import { OutboxService } from '../outbox/outbox.service';
 import { WebhookEnqueueService } from '../webhooks/webhook-enqueue.service';
@@ -120,7 +119,7 @@ export class RequestEngine {
     });
 
     this.logger.log({ requestId: item.id, type }, 'Request submitted');
-    return item as RequestItem;
+    return item;
   }
 
   // ── Approve ────────────────────────────────────────────────────────────────
@@ -252,7 +251,18 @@ export class RequestEngine {
       { requestId, type: request.type, step: currentStep, isFinalStep },
       isFinalStep ? 'Request approved' : `Request step ${currentStep}/${maxStep} approved`,
     );
-    return updated as RequestItem;
+
+    // Post-tx hook for external provisioning/deprovisioning (Graph, GitHub, etc.)
+    if (isFinalStep && def.afterApprove) {
+      void def.afterApprove(request.payload, requestId, actor.sub).catch((err: unknown) => {
+        this.logger.error(
+          { requestId, type: request.type },
+          `afterApprove hook failed: ${String(err)}`,
+        );
+      });
+    }
+
+    return updated;
   }
 
   // ── Reject ────────────────────────────────────────────────────────────────
@@ -328,7 +338,7 @@ export class RequestEngine {
     });
 
     this.logger.log({ requestId, type: request.type }, 'Request rejected');
-    return updated as RequestItem;
+    return updated;
   }
 
   // ── Cancel ─────────────────────────────────────────────────────────────────
@@ -370,7 +380,7 @@ export class RequestEngine {
       return row;
     });
 
-    return updated as RequestItem;
+    return updated;
   }
 
   // ── Expire (called by worker cron) ─────────────────────────────────────────
@@ -416,7 +426,7 @@ export class RequestEngine {
       .where(eq(requestApprovals.requestId, id))
       .orderBy(asc(requestApprovals.step), asc(requestApprovals.decidedAt));
 
-    return { ...(row as RequestItem), approvals: approvalRows as RequestItemWithApprovals['approvals'] };
+    return { ...(row), approvals: approvalRows as RequestItemWithApprovals['approvals'] };
   }
 
   async list(
@@ -428,7 +438,7 @@ export class RequestEngine {
     const conditions = [
       filters.type ? eq(requestItems.type, filters.type) : undefined,
       filters.requesterId ? eq(requestItems.requesterId, filters.requesterId) : undefined,
-      filters.status ? eq(requestItems.status, filters.status as RequestStatus) : undefined,
+      filters.status ? eq(requestItems.status, filters.status) : undefined,
       filters.myQueue
         ? or(
             eq(requestItems.assigneeId, actorId),
@@ -475,7 +485,7 @@ export class RequestEngine {
 
     return {
       rows: rows.map((r) => ({
-        ...(r as RequestItem),
+        ...(r),
         approvals: approvalMap.get(r.id) ?? [],
       })),
       total: count,
@@ -515,7 +525,7 @@ export class RequestEngine {
       })
       .returning();
 
-    return row as RequestComment;
+    return row;
   }
 
   /** List comments for a request, ordered oldest-first. */
@@ -525,7 +535,7 @@ export class RequestEngine {
       .from(requestComments)
       .where(eq(requestComments.requestId, requestId))
       .orderBy(asc(requestComments.createdAt));
-    return rows as RequestComment[];
+    return rows;
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────

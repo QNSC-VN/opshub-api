@@ -26,6 +26,10 @@ import { NotificationsModule } from '@modules/notifications';
 import { RequestsModule } from '@modules/requests';
 import { ReportsModule } from '@modules/reports';
 import { WebhooksModule } from '@modules/webhooks';
+import { LicenseModule } from '@modules/license';
+import { CatalogModule } from '@modules/catalog';
+import { AiModule } from '@modules/ai';
+import { SecurityPostureModule } from '@modules/security-posture';
 
 @Module({
   imports: [
@@ -72,6 +76,10 @@ import { WebhooksModule } from '@modules/webhooks';
     RequestsModule,
     ReportsModule,
     WebhooksModule,
+    LicenseModule,
+    CatalogModule,
+    AiModule,
+    SecurityPostureModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },

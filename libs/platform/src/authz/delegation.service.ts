@@ -68,7 +68,7 @@ export class DelegationService {
         reason: input.reason ?? null,
       })
       .returning();
-    return row as ApprovalDelegation;
+    return row;
   }
 
   /**
@@ -101,7 +101,7 @@ export class DelegationService {
       .select()
       .from(approvalDelegations)
       .where(eq(approvalDelegations.fromUserId, fromUserId));
-    return rows as ApprovalDelegation[];
+    return rows;
   }
 
   /** List all delegations received BY a user (incoming). */
@@ -110,7 +110,7 @@ export class DelegationService {
       .select()
       .from(approvalDelegations)
       .where(eq(approvalDelegations.toUserId, toUserId));
-    return rows as ApprovalDelegation[];
+    return rows;
   }
 
   /**
@@ -132,7 +132,7 @@ export class DelegationService {
         ),
       )
       .limit(1);
-    return row ? (row as ApprovalDelegation) : null;
+    return row ? (row) : null;
   }
 
   /** Purge delegations whose window ended before `before`. Called by the expiry cron. */

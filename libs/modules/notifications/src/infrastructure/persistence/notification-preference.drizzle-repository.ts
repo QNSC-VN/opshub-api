@@ -16,7 +16,7 @@ export class NotificationPreferenceDrizzleRepository
       .select()
       .from(notificationPreferences)
       .where(eq(notificationPreferences.userId, userId))
-      .then((rows) => rows.map(this.map));
+      .then((rows) => rows.map((row) => this.map(row)));
   }
 
   async findOne(userId: string, type: string): Promise<NotificationPreference | null> {
@@ -38,7 +38,7 @@ export class NotificationPreferenceDrizzleRepository
           inArray(notificationPreferences.type, [type, '*']),
         ),
       )
-      .then((rows) => rows.map(this.map));
+      .then((rows) => rows.map((row) => this.map(row)));
   }
 
   async upsert(input: UpsertPreferenceInput): Promise<NotificationPreference> {

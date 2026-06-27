@@ -1,5 +1,6 @@
 import type {
   ComplianceFinding,
+  CreateFindingInput,
   FindingFilters,
   FindingStatus,
   SoftwareCatalogEntry,
@@ -23,6 +24,7 @@ export interface IComplianceRepository {
     offset: number,
   ): Promise<{ rows: SoftwareCatalogEntry[]; total: number }>;
 
+  createFinding(input: CreateFindingInput): Promise<ComplianceFinding>;
   findFindingById(id: string): Promise<ComplianceFinding | null>;
   listFindings(
     filters: FindingFilters,

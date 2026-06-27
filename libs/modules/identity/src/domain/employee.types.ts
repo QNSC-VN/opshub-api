@@ -12,6 +12,8 @@ export interface Employee {
   managerId: string | null;
   roles: string[];
   status: EmployeeStatus;
+  /** S3 object key for the profile photo; null until an avatar is uploaded. */
+  photoStorageKey: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

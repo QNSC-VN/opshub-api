@@ -38,6 +38,9 @@ import type { JwtPayload } from '@platform';
 import { NotificationPubSubService } from '@platform/notifications';
 import { NotificationsService } from '../../application/notifications.service';
 
+/** SSE heartbeat cadence — keeps TCP alive through proxies and load balancers (RFC 6202 §5.3). */
+const HEARTBEAT_INTERVAL_MS = 25_000;
+
 @ApiTags('notifications')
 @Controller('notifications')
 @Auth()
@@ -92,7 +95,7 @@ export class NotificationSseController {
         return;
       }
       raw.write(': heartbeat\n\n');
-    }, 25_000);
+    }, HEARTBEAT_INTERVAL_MS);
 
     // Graceful cleanup on client disconnect.
     raw.on('close', () => {

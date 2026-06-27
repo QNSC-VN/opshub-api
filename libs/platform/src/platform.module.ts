@@ -28,6 +28,7 @@ import { NotificationSchedulerService } from './notifications/notification-sched
 import { NotificationPubSubService } from './notifications/notification-pubsub.service';
 import { DelegationService } from './authz/delegation.service';
 import { WebhookEnqueueService } from './webhooks/webhook-enqueue.service';
+import { StorageService } from './storage/storage.service';
 
 /**
  * Platform module — cross-cutting infrastructure shared by every bounded context:
@@ -47,7 +48,7 @@ import { WebhookEnqueueService } from './webhooks/webhook-enqueue.service';
         publicKey: config.get('JWT_PUBLIC_KEY'),
         signOptions: {
           algorithm: 'ES256',
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
           expiresIn: config.get('JWT_ACCESS_EXPIRY') as any,
           issuer: config.get('JWT_ISSUER'),
           audience: config.get('JWT_AUDIENCE'),
@@ -95,8 +96,10 @@ import { WebhookEnqueueService } from './webhooks/webhook-enqueue.service';
     NotificationPubSubService,
     DelegationService,
     WebhookEnqueueService,
+    StorageService,
   ],
   exports: [
+    StorageService,
     AppConfigModule,
     DatabaseModule,
     JwtModule,

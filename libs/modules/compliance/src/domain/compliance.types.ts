@@ -51,3 +51,13 @@ export interface FindingFilters {
   assetId?: string;
   employeeId?: string;
 }
+
+export interface CreateFindingInput {
+  assetId?: string | null;
+  employeeId?: string | null;
+  softwareName: string;
+  softwareVersion?: string | null;
+  severity: FindingSeverity;
+  source: string;
+  detectedAt?: Date;
+}

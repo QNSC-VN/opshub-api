@@ -3,6 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { UnauthorizedException, ErrorCodes, AppConfigService, CacheService } from '@platform';
+import { MS_PER_DAY } from '@shared-kernel';
 import { AuditService } from '@modules/audit';
 import {
   EMPLOYEE_REPOSITORY,
@@ -41,6 +42,20 @@ export interface TokenResult {
 export class AuthService {
   /** TTL for session revocation cache entries = access token lifetime (15 min). */
   static readonly SESSION_REVOKE_TTL = 15 * 60; // seconds
+
+  /** Convert a JWT expiry string like "15m", "8h", "1d" to seconds. */
+  static parseExpiryToSeconds(expiry: string): number {
+    const match = /^(\d+)(s|m|h|d)$/.exec(expiry.trim());
+    if (!match) return AuthService.SESSION_REVOKE_TTL;
+    const n = parseInt(match[1], 10);
+    switch (match[2]) {
+      case 's': return n;
+      case 'm': return n * 60;
+      case 'h': return n * 3600;
+      case 'd': return n * 86400;
+      default:  return AuthService.SESSION_REVOKE_TTL;
+    }
+  }
 
   constructor(
     private readonly jwt: JwtService,
@@ -95,7 +110,7 @@ export class AuthService {
         ],
         audience: clientId,
       });
-      claims = payload as Record<string, unknown>;
+      claims = payload;
     } catch {
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Invalid Entra ID token');
     }
@@ -103,6 +118,11 @@ export class AuthService {
     const oid = claims['oid'] as string | undefined;
     const email = (claims['preferred_username'] ?? claims['email'] ?? claims['upn']) as string | undefined;
     const displayName = claims['name'] as string | undefined;
+    // Entra App Roles claim — populated when the user is assigned roles in the app registration.
+    // Falls back to ['employee'] so first-time SSO users always get at least read access.
+    const entraRoles = Array.isArray(claims['roles'])
+      ? (claims['roles'] as string[]).filter((r) => typeof r === 'string')
+      : ['employee'];
 
     if (!oid || !email) {
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Token missing oid or email claim');
@@ -111,6 +131,9 @@ export class AuthService {
     const employee = await this.employeeRepo.upsertByEntraOid(oid, {
       email: email.toLowerCase(),
       displayName: displayName ?? email.split('@')[0],
+      // Sync roles from Entra on every login — if IT removes a role in Entra portal,
+      // it takes effect at the user's next sign-in without any OpsHub admin action.
+      roles: entraRoles,
     });
 
     this.#assertActive(employee);
@@ -212,7 +235,7 @@ export class AuthService {
     const rawRefreshToken = randomBytes(32).toString('base64url');
     const tokenHash = this.#hash(rawRefreshToken);
     const expiryDays = this.config.get('JWT_REFRESH_EXPIRY_DAYS');
-    const expiresAt = new Date(Date.now() + expiryDays * 86_400_000);
+    const expiresAt = new Date(Date.now() + expiryDays * MS_PER_DAY);
 
     await this.refreshTokenRepo.create({
       id: sessionId,
@@ -231,7 +254,11 @@ export class AuthService {
       roles: employee.roles,
     });
 
-    const expiresIn = AuthService.SESSION_REVOKE_TTL; // 900s — matches JWT_ACCESS_EXPIRY=15m
+    // Derive expiresIn from the actual JWT config so the frontend knows the real
+    // token lifetime (e.g. 8h = 28800s) instead of a hardcoded 15-min constant.
+    const expiresIn = AuthService.parseExpiryToSeconds(
+      this.config.get('JWT_ACCESS_EXPIRY'),
+    );
 
     return { accessToken, expiresIn, rawRefreshToken };
   }

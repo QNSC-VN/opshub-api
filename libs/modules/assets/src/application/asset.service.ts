@@ -7,7 +7,9 @@ import {
   ConflictException,
   PreconditionFailedException,
   ErrorCodes,
+  StorageService,
 } from '@platform';
+import type { PresignUploadResult } from '@platform';
 import { AuditService } from '@modules/audit';
 import { EmployeeService } from '@modules/identity';
 import { ASSET_REPOSITORY, type IAssetRepository } from '../domain/ports/asset.repository';
@@ -19,6 +21,7 @@ export class AssetService {
     @Inject(ASSET_REPOSITORY) private readonly assetRepo: IAssetRepository,
     @InjectDrizzle() private readonly db: DrizzleDB,
     private readonly outbox: OutboxService,
+    private readonly storage: StorageService,
     private readonly audit: AuditService,
     private readonly employees: EmployeeService,
   ) {}
@@ -118,8 +121,22 @@ export class AssetService {
   }
 
   async retire(assetId: string, actor: { sub: string; email: string }): Promise<Asset> {
-    await this.getById(assetId);
+    const asset = await this.getById(assetId);
+    if (asset.status === 'retired') {
+      throw new PreconditionFailedException(ErrorCodes.ASSET_RETIRED, 'Asset is already retired');
+    }
+    if (asset.status === 'assigned') {
+      throw new PreconditionFailedException(ErrorCodes.ASSET_ALREADY_ASSIGNED, 'Cannot retire an assigned asset — unassign it first');
+    }
     await this.assetRepo.retire(assetId);
+    await this.db.transaction(async (tx) => {
+      await this.outbox.enqueue(tx, {
+        aggregateType: 'asset',
+        aggregateId: assetId,
+        eventType: 'asset.retired',
+        payload: { assetId },
+      });
+    });
     await this.audit.record({
       actorId: actor.sub,
       actorEmail: actor.email,
@@ -133,5 +150,63 @@ export class AssetService {
   async listAssignments(assetId: string): Promise<AssetAssignment[]> {
     await this.getById(assetId);
     return this.assetRepo.listAssignments(assetId);
+  }
+
+  // ── Photo upload ──────────────────────────────────────────────────────────
+
+  /** Step 1 — returns a presigned S3 PUT URL for the client to upload to. */
+  async presignPhoto(
+    assetId: string,
+    input: { fileName: string; mimeType: string; sizeBytes: number },
+    actor: { sub: string; email: string },
+  ): Promise<PresignUploadResult> {
+    await this.getById(assetId); // 404 guard
+    return this.storage.presignUpload(
+      {
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        resourceType: 'asset-photo',
+        linkedEntityType: 'asset',
+        linkedEntityId: assetId,
+      },
+      actor.sub,
+    );
+  }
+
+  /** Step 3 — verify upload and link the S3 key to the asset row. */
+  async confirmPhoto(
+    assetId: string,
+    fileId: string,
+    actor: { sub: string; email: string },
+  ): Promise<{ photoUrl: string }> {
+    const asset = await this.getById(assetId);
+    const result = await this.storage.confirmUpload(fileId, actor.sub);
+
+    // Soft-delete previous photo if one exists
+    if (asset.photoStorageKey) {
+      const old = await this.storage.findById(asset.photoStorageKey);
+      if (old) void this.storage.deleteFile(old.id, old.uploaderId);
+    }
+
+    await this.assetRepo.updatePhoto(assetId, result.key);
+
+    void this.audit.record({
+      actorId: actor.sub,
+      actorEmail: actor.email,
+      action: 'asset.photo_updated',
+      resourceType: 'asset',
+      resourceId: assetId,
+    });
+
+    return { photoUrl: result.url };
+  }
+
+  /** Returns a time-limited download URL for the asset photo. */
+  async getPhotoUrl(assetId: string): Promise<{ photoUrl: string | null }> {
+    const asset = await this.getById(assetId);
+    if (!asset.photoStorageKey) return { photoUrl: null };
+    const url = await this.storage.presignGet(asset.photoStorageKey);
+    return { photoUrl: url };
   }
 }

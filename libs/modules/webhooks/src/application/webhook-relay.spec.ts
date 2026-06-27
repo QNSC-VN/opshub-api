@@ -67,6 +67,7 @@ function makeMockDb() {
 
   return {
     update: updateChain.update,
+    // eslint-disable-next-line @typescript-eslint/require-await
     transaction: vi.fn().mockImplementation(async (cb: (tx: unknown) => unknown) => cb(updateChain)),
   };
 }
@@ -114,6 +115,7 @@ describe('WebhookRelayService — HMAC signature', () => {
     let capturedBody = '';
     let capturedSig = '';
 
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
     mockFetch.mockImplementation((url: string, opts: RequestInit) => {
       capturedBody = opts.body as string;
       capturedSig = (opts.headers as Record<string, string>)['X-OpsHub-Signature'];
@@ -130,6 +132,7 @@ describe('WebhookRelayService — HMAC signature', () => {
     const row = makeRow({ id: 'del-123', eventType: 'request.submitted' });
     let parsedBody: Record<string, unknown> = {};
 
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
     mockFetch.mockImplementation((_: string, opts: RequestInit) => {
       parsedBody = JSON.parse(opts.body as string) as Record<string, unknown>;
       return Promise.resolve({ ok: true });

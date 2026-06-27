@@ -1,5 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { NotFoundException, ConflictException, ErrorCodes, CacheService } from '@platform';
+import { NotFoundException, ConflictException, ErrorCodes, CacheService, StorageService } from '@platform';
+import type { PresignUploadResult } from '@platform';
+import { SEC_PER_DAY } from '@shared-kernel';
 import { AuditService } from '@modules/audit';
 import {
   EMPLOYEE_REPOSITORY,
@@ -29,6 +31,7 @@ export class EmployeeService {
     @Inject(EMPLOYEE_REPOSITORY) private readonly employeeRepo: IEmployeeRepository,
     @Inject(REFRESH_TOKEN_REPOSITORY) private readonly refreshTokenRepo: IRefreshTokenRepository,
     private readonly cache: CacheService,
+    private readonly storage: StorageService,
     private readonly audit: AuditService,
   ) {}
 
@@ -93,7 +96,7 @@ export class EmployeeService {
       await this.refreshTokenRepo.revokeAllForEmployee(id);
       // Fast-revoke any live access tokens — blocks them within milliseconds
       // TTL = 24h to cover any edge cases (access tokens expire in 15 min anyway)
-      await this.cache.set(`revoked:employee:${id}`, '1', 24 * 60 * 60);
+      await this.cache.set(`revoked:employee:${id}`, '1', SEC_PER_DAY);
     } else if (status === 'active') {
       // Clear revocation if re-activating an offboarded employee
       await this.cache.del(`revoked:employee:${id}`);
@@ -117,5 +120,82 @@ export class EmployeeService {
     offset: number,
   ): Promise<{ rows: Employee[]; total: number }> {
     return this.employeeRepo.list(filters, limit, offset);
+  }
+
+  // ── Avatar ──────────────────────────────────────────────────────────────────
+
+  /** Step 1 — returns a presigned S3 PUT URL for the client to upload to directly. */
+  async presignAvatar(
+    employeeId: string,
+    input: { fileName: string; mimeType: string; sizeBytes: number },
+    actor: Actor,
+  ): Promise<PresignUploadResult> {
+    await this.getById(employeeId); // 404 guard
+    return this.storage.presignUpload(
+      {
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        resourceType: 'employee-avatar',
+        linkedEntityType: 'employee',
+        linkedEntityId: employeeId,
+      },
+      actor.sub,
+    );
+  }
+
+  /** Step 3 — verify upload, link the S3 key to the employee row. */
+  async confirmAvatar(
+    employeeId: string,
+    fileId: string,
+    actor: Actor,
+  ): Promise<{ avatarUrl: string }> {
+    const employee = await this.getById(employeeId);
+    const result = await this.storage.confirmUpload(fileId, actor.sub);
+
+    // Soft-delete the old avatar if one exists
+    if (employee.photoStorageKey) {
+      const old = await this.storage.findById(employee.photoStorageKey);
+      if (old) void this.storage.deleteFile(old.id, old.uploaderId);
+    }
+
+    await this.employeeRepo.updatePhoto(employeeId, result.key);
+
+    void this.audit.record({
+      actorId: actor.sub,
+      actorEmail: actor.email,
+      action: 'employee.avatar_updated',
+      resourceType: 'employee',
+      resourceId: employeeId,
+    });
+
+    return { avatarUrl: result.url };
+  }
+
+  /** Returns a time-limited download URL for the employee’s avatar. */
+  async getAvatarUrl(employeeId: string): Promise<{ avatarUrl: string | null }> {
+    const employee = await this.getById(employeeId);
+    if (!employee.photoStorageKey) return { avatarUrl: null };
+    const url = await this.storage.presignGet(employee.photoStorageKey);
+    return { avatarUrl: url };
+  }
+
+  /** Remove the employee’s avatar from S3 and clear the column. */
+  async deleteAvatar(employeeId: string, actor: Actor): Promise<void> {
+    const employee = await this.getById(employeeId);
+    if (!employee.photoStorageKey) return; // already none — idempotent
+
+    const file = await this.storage.findById(employee.photoStorageKey);
+    if (file) void this.storage.deleteFile(file.id, file.uploaderId);
+
+    await this.employeeRepo.updatePhoto(employeeId, null);
+
+    void this.audit.record({
+      actorId: actor.sub,
+      actorEmail: actor.email,
+      action: 'employee.avatar_deleted',
+      resourceType: 'employee',
+      resourceId: employeeId,
+    });
   }
 }

@@ -41,8 +41,10 @@ const PERMISSIONS: Array<{ key: string; description: string }> = [
   { key: 'compliance.read',   description: 'View compliance findings and software catalog' },
   { key: 'compliance.manage', description: 'Resolve findings and manage compliance data' },
   // Workforce
-  { key: 'workforce.read',    description: 'View timesheets, leave and overtime entries' },
-  { key: 'workforce.approve', description: 'Approve or reject leave and overtime requests' },
+  { key: 'workforce.read',            description: 'View timesheets, leave and overtime entries' },
+  { key: 'workforce.approve',         description: 'Approve or reject workforce requests (legacy)' },
+  { key: 'workforce.leave.review',    description: 'Approve or reject leave requests via the approval engine' },
+  { key: 'workforce.overtime.review', description: 'Approve or reject overtime requests via the approval engine' },
   // Onboarding / Offboarding workflows
   { key: 'onboarding.approve',   description: 'Step-1: Manager approves new employee hire' },
   { key: 'onboarding.provision', description: 'Step-2: IT provisions accounts and equipment' },
@@ -52,6 +54,9 @@ const PERMISSIONS: Array<{ key: string; description: string }> = [
   { key: 'audit.read', description: 'Read the immutable audit log' },
   // Reports
   { key: 'reports.read', description: 'View aggregate reports and analytics dashboards' },
+  // Security Posture
+  { key: 'security.view',   description: 'View Secure Score trends and baseline drift checks' },
+  { key: 'security.manage', description: 'Trigger Graph sync and manage security posture data' },
   // Notifications
   { key: 'notifications.manage', description: 'Manage notification preferences for all users' },
   // Outbound Webhooks
@@ -73,6 +78,7 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
       'asset.read', 'asset.write', 'asset.reassign',
       'access_request.read', 'access_request.approve', 'access_request.security_approve',
       'compliance.read',
+      'security.view', 'security.manage',
       'audit.read',
       'reports.read',
       'rbac.read',
@@ -85,6 +91,7 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
     name: 'Security Officer',
     permissions: [
       'compliance.read', 'compliance.manage',
+      'security.view', 'security.manage',
       'access_request.read', 'access_request.approve', 'access_request.security_approve',
       'audit.read',
       'reports.read',
@@ -96,6 +103,7 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
     permissions: [
       'employee.read', 'employee.write', 'employee.offboard',
       'workforce.read', 'workforce.approve',
+      'workforce.leave.review', 'workforce.overtime.review',
       'audit.read',
       'reports.read',
       'onboarding.approve', 'onboarding.complete', 'offboarding.approve',
@@ -107,6 +115,7 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
     permissions: [
       'employee.read',
       'workforce.read', 'workforce.approve',
+      'workforce.leave.review', 'workforce.overtime.review',
       'access_request.read', 'access_request.approve',
       'reports.read',
       'onboarding.approve',
@@ -120,7 +129,7 @@ const ROLES: Array<{ key: string; name: string; permissions: string[] }> = [
   {
     key: 'auditor',
     name: 'Auditor (read-only)',
-    permissions: ['rbac.read', 'audit.read', 'compliance.read', 'employee.read', 'asset.read', 'reports.read'],
+    permissions: ['rbac.read', 'audit.read', 'compliance.read', 'security.view', 'employee.read', 'asset.read', 'reports.read'],
   },
   {
     key: 'employee',
@@ -313,7 +322,7 @@ async function main(): Promise<void> {
     }
   }
 
-  // eslint-disable-next-line no-console
+   
   console.log(
     `✅ Seeded: ${PERMISSIONS.length} permissions | ${ROLES.length} roles | ${EMPLOYEES.length} employees`,
   );
@@ -321,7 +330,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
+   
   console.error('❌ Seed failed:', err);
   process.exit(1);
 });

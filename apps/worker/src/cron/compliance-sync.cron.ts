@@ -13,6 +13,7 @@ export class ComplianceSyncCron {
   private readonly logger = new Logger(ComplianceSyncCron.name);
 
   @Cron(CronExpression.EVERY_HOUR)
+  // eslint-disable-next-line @typescript-eslint/require-await
   async sync(): Promise<void> {
     this.logger.log('Compliance sync tick (stub) — Graph delta ingestion not yet wired');
   }

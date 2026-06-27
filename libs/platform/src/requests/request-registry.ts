@@ -15,7 +15,7 @@ export class RequestRegistry {
   /** Call from the domain module's TypeDef service `onModuleInit`. */
   register<T>(def: RequestTypeDef<T>): void {
     if (this.defs.has(def.type)) return; // idempotent — hot reload safe
-    this.defs.set(def.type, def as RequestTypeDef<unknown>);
+    this.defs.set(def.type, def);
   }
 
   /** Returns the TypeDef or throws. Never returns null — fail fast at call site. */

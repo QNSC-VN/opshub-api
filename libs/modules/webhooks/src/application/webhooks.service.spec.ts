@@ -3,7 +3,7 @@
  *
  * All Drizzle calls are mocked. No database required.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { WebhooksService } from './webhooks.service';
 import { NotFoundException } from '@platform';
 
@@ -49,10 +49,12 @@ function makeChain(resolvedValue: unknown) {
   }
   chain['returning'].mockResolvedValue(resolvedValue);
   chain['limit'].mockResolvedValue(resolvedValue);
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises
   chain['where'].mockImplementation(() => {
     const p = Promise.resolve(resolvedValue);
     return Object.assign(p, chain);
   });
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises
   chain['from'].mockImplementation(() => {
     const p = Promise.resolve(resolvedValue);
     return Object.assign(p, chain);
@@ -109,7 +111,7 @@ describe('WebhooksService.create()', () => {
     const { service } = buildService({ insertRow: row });
 
     const result = await service.create({
-      url: row.url as string,
+      url: row.url,
       secret: 'my-secret-min-16-chars!!!',
       events: ['request.approved'],
     });

@@ -8,6 +8,7 @@ import { webhookDeliveries, webhookSubscriptions } from '../../../../../db/schem
 
 const WEBHOOK_TIMEOUT_MS = 10_000; // 10s per delivery attempt
 const RETRY_DELAYS_SECONDS = [60, 300, 900, 3600]; // 1m → 5m → 15m → 1h
+const MAX_DELIVERY_ERROR_LENGTH = 2_000; // chars stored in lastError column
 
 type DeliveryRow = {
   id: string;
@@ -123,7 +124,7 @@ export class WebhookRelayService extends AbstractOutboxRelay<DeliveryRow> {
       .set({
         status: newStatus,
         attempts: newAttempts,
-        lastError: error.slice(0, 2000),
+        lastError: error.slice(0, MAX_DELIVERY_ERROR_LENGTH),
         nextAttemptAt: newStatus === 'failed' ? new Date() : nextAttemptAt,
       })
       .where(eq(webhookDeliveries.id, rowId));

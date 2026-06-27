@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, eq, gte, lte, sql, isNotNull, ne } from 'drizzle-orm';
+import { and, eq, gte, lte, sql, isNotNull } from 'drizzle-orm';
 import { InjectDrizzle } from '@platform';
 import type { DrizzleDB } from '@platform';
 import { requestItems } from '../../../../../db/schema/requests';
@@ -47,7 +47,7 @@ export class ReportsService {
       .groupBy(requestItems.type, requestItems.status)
       .orderBy(requestItems.type, requestItems.status);
 
-    return rows as RequestSummaryRow[];
+    return rows;
   }
 
   /**
@@ -96,7 +96,7 @@ export class ReportsService {
       .groupBy(requestItems.type)
       .orderBy(requestItems.type);
 
-    return rows as CycleTimeRow[];
+    return rows;
   }
 
   /**
@@ -145,7 +145,7 @@ export class ReportsService {
       .groupBy(requestItems.type)
       .orderBy(requestItems.type);
 
-    return rows as SlaComplianceRow[];
+    return rows;
   }
 
   /**
@@ -174,7 +174,7 @@ export class ReportsService {
       .groupBy(requestItems.type)
       .orderBy(requestItems.type);
 
-    return rows as QueueDepthRow[];
+    return rows;
   }
 
   /**
@@ -204,7 +204,7 @@ export class ReportsService {
       .groupBy(sql`date_trunc('day', ${requestItems.submittedAt})::date`)
       .orderBy(sql`date_trunc('day', ${requestItems.submittedAt})::date`);
 
-    return rows as ThroughputPoint[];
+    return rows;
   }
 
   // ─── Compliance ─────────────────────────────────────────────────────────────
@@ -237,7 +237,7 @@ export class ReportsService {
       .groupBy(complianceFindings.severity)
       .orderBy(complianceFindings.severity);
 
-    return rows as FindingsSummaryRow[];
+    return rows;
   }
 
   // ─── Assets ──────────────────────────────────────────────────────────────────
@@ -269,7 +269,7 @@ export class ReportsService {
       .groupBy(assets.type)
       .orderBy(assets.type);
 
-    return rows as AssetUtilizationRow[];
+    return rows;
   }
 
   // ─── Workforce ───────────────────────────────────────────────────────────────
@@ -297,7 +297,7 @@ export class ReportsService {
       .groupBy(leaveRequests.leaveType, leaveRequests.status)
       .orderBy(leaveRequests.leaveType, leaveRequests.status);
 
-    return rows as LeaveSummaryRow[];
+    return rows;
   }
 
   /**
@@ -324,6 +324,6 @@ export class ReportsService {
       .groupBy(overtimeEntries.status)
       .orderBy(overtimeEntries.status);
 
-    return rows as OvertimeSummaryRow[];
+    return rows;
   }
 }

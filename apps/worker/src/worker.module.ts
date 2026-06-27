@@ -7,6 +7,7 @@ import { ComplianceSyncCron } from './cron/compliance-sync.cron';
 import { RequestExpiryCron } from './cron/request-expiry.cron';
 import { SlaBreachCron } from './cron/sla-breach.cron';
 import { DelegationExpiryCron } from './cron/delegation-expiry.cron';
+import { StorageCleanupCron } from './cron/storage-cleanup.cron';
 
 @Module({
   imports: [
@@ -24,6 +25,6 @@ import { DelegationExpiryCron } from './cron/delegation-expiry.cron';
     ScheduleModule.forRoot(),
     PlatformModule,
   ],
-  providers: [OutboxRelayService, ComplianceSyncCron, RequestExpiryCron, SlaBreachCron, DelegationExpiryCron],
+  providers: [OutboxRelayService, ComplianceSyncCron, RequestExpiryCron, SlaBreachCron, DelegationExpiryCron, StorageCleanupCron],
 })
 export class WorkerModule {}

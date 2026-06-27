@@ -62,7 +62,7 @@ export class NotificationRelayService
   async onModuleInit(): Promise<void> {
     this.logger.log('Notification relay started — polling notification_outbox every 5s');
     this.unsubscribeRelayWake = await this.pubSub.subscribeRelayWake(() => {
-      this.relay().catch((err) =>
+      this.relay().catch((err: unknown) =>
         this.logger.error({ err }, 'Notification relay triggered by wake signal failed'),
       );
     });

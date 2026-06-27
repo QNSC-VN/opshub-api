@@ -46,5 +46,18 @@ export class EmployeeResponseDto {
   managerId!: string | null;
   roles!: string[];
   status!: string;
+  photoStorageKey!: string | null;
   createdAt!: string;
 }
+
+export const PresignAvatarSchema = z.object({
+  fileName: z.string().min(1).max(255),
+  mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+  sizeBytes: z.number().int().positive().max(5 * 1024 * 1024),
+});
+export class PresignAvatarDto extends createZodDto(PresignAvatarSchema) {}
+
+export const ConfirmAvatarSchema = z.object({
+  fileId: z.string().uuid(),
+});
+export class ConfirmAvatarDto extends createZodDto(ConfirmAvatarSchema) {}

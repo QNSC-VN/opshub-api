@@ -24,6 +24,8 @@ export const assets = assetsSchema.table(
     specs: jsonb('specs').notNull().$type<Record<string, unknown>>().default({}),
     /** Currently assigned employee, null when in stock. */
     assignedTo: uuid('assigned_to'),
+    /** S3 key for a photo of the physical asset (optional). */
+    photoStorageKey: varchar('photo_storage_key', { length: 512 }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

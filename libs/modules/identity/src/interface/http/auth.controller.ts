@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Auth, ApiCommonErrors, CurrentUser, Public, UnauthorizedException, PermissionDeniedException, ErrorCodes, AppConfigService, RateLimit } from '@platform';
 import type { JwtPayload } from '@platform';
 import type { FastifyRequest, FastifyReply } from 'fastify';
@@ -42,6 +42,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'SSO login — validate Entra ID id_token, JIT-provision employee, mint internal JWT',
   })
+  @ApiOkResponse({ type: AuthResponseDto })
   @ApiCommonErrors(401)
   async entraLogin(
     @Body() dto: EntraLoginDto,
@@ -57,6 +58,7 @@ export class AuthController {
   @RateLimit('AUTH_LOGIN')
   @HttpCode(200)
   @ApiOperation({ summary: 'Dev login — only available outside production (Entra OIDC is used in prod)' })
+  @ApiOkResponse({ type: AuthResponseDto })
   @ApiCommonErrors(401, 403, 422)
   async devLogin(
     @Body() dto: DevLoginDto,
@@ -75,6 +77,7 @@ export class AuthController {
   @RateLimit('AUTH_REFRESH')
   @HttpCode(200)
   @ApiOperation({ summary: 'Silently refresh the access token using the HttpOnly refresh cookie' })
+  @ApiOkResponse({ type: AuthResponseDto })
   @ApiCommonErrors(401)
   async refresh(
     @Req() request: FastifyRequest,
@@ -94,6 +97,7 @@ export class AuthController {
   @Auth()
   @HttpCode(204)
   @ApiOperation({ summary: 'Revoke the current session — invalidates both the refresh token and the active access token' })
+  @ApiNoContentResponse()
   async logout(
     @CurrentUser() user: JwtPayload,
     @Req() request: FastifyRequest,
@@ -111,6 +115,7 @@ export class AuthController {
   @Get('me')
   @Auth()
   @ApiOperation({ summary: 'Return the authenticated principal' })
+  @ApiOkResponse({ type: MeResponseDto })
   @ApiCommonErrors(401)
   me(@CurrentUser() user: JwtPayload): MeResponseDto {
     return { sub: user.sub, email: user.email, name: user.name, roles: user.roles };

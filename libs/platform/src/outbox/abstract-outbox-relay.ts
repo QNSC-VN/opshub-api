@@ -138,15 +138,15 @@ export abstract class AbstractOutboxRelay<TRow extends { id: string; attempts: n
       });
 
       for (const task of postCommitTasks) {
-        task().catch((err) => this.logger.error({ err }, 'Post-commit task failed'));
+        task().catch((err: unknown) => this.logger.error({ err }, 'Post-commit task failed'));
       }
     } finally {
       this.isRelaying = false;
       if (this.wakeOnComplete) {
         this.wakeOnComplete = false;
-        setImmediate(() =>
-          this.relay().catch((err) => this.logger.error({ err }, 'Post-wake relay failed')),
-        );
+        setImmediate(() => {
+          void this.relay().catch((err: unknown) => this.logger.error({ err }, 'Post-wake relay failed'));
+        });
       }
     }
   }

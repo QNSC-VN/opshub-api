@@ -11,4 +11,6 @@ export interface IEmployeeRepository {
   list(filters: EmployeeFilters, limit: number, offset: number): Promise<{ rows: Employee[]; total: number }>;
   update(id: string, input: UpdateEmployeeInput): Promise<Employee>;
   updateStatus(id: string, status: EmployeeStatus): Promise<Employee>;
+  /** Update the S3 object key for the employee’s profile photo. Pass null to clear. */
+  updatePhoto(id: string, photoStorageKey: string | null): Promise<void>;
 }

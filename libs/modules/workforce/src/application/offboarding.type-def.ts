@@ -1,6 +1,7 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { and, eq, isNull } from 'drizzle-orm';
-import { type DbExecutor, RequestRegistry, RequestTypeDef } from '@platform';
+import { type DbExecutor, InjectDrizzle, type DrizzleDB, RequestRegistry, RequestTypeDef } from '@platform';
+import { REQUEST_TYPE } from '@shared-kernel';
 import {
   employees,
   userRoleAssignments,
@@ -9,6 +10,7 @@ import {
   assets,
   refreshTokens,
 } from '../../../../../db/schema';
+import { GraphProvisioningService } from './graph-provisioning.service';
 
 export interface OffboardingPayload extends Record<string, unknown> {
   /** The employee being offboarded. */
@@ -33,13 +35,19 @@ export interface OffboardingPayload extends Record<string, unknown> {
 export class OffboardingTypeDef
   implements RequestTypeDef<OffboardingPayload>, OnModuleInit
 {
-  readonly type = 'offboarding';
+  private readonly logger = new Logger(OffboardingTypeDef.name);
+
+  readonly type = REQUEST_TYPE.OFFBOARDING;
   readonly requiredApprovalPermission = 'offboarding.approve';
   readonly allowSelfApproval = false;
   readonly defaultExpiryHours = 72; // 3 days
   readonly slaHours = 24; // same-day SLA for security
 
-  constructor(private readonly registry: RequestRegistry) {}
+  constructor(
+    private readonly registry: RequestRegistry,
+    @InjectDrizzle() private readonly db: DrizzleDB,
+    private readonly graphProvisioning: GraphProvisioningService,
+  ) {}
 
   onModuleInit(): void {
     this.registry.register(this);
@@ -102,5 +110,22 @@ export class OffboardingTypeDef
     _tx: DbExecutor,
   ): Promise<void> {
     // Nothing to undo — no domain state was changed on submit.
+  }
+
+  async afterApprove(payload: OffboardingPayload): Promise<void> {
+    if (!this.graphProvisioning.isEnabled()) return;
+
+    const [row] = await this.db
+      .select({ entraOid: employees.entraOid })
+      .from(employees)
+      .where(eq(employees.id, payload.employeeId))
+      .limit(1);
+
+    if (!row?.entraOid) {
+      this.logger.warn(`Offboarding afterApprove: no Entra OID for employee ${payload.employeeId}, skipping Graph disable`);
+      return;
+    }
+
+    await this.graphProvisioning.disableEntraUser(row.entraOid);
   }
 }

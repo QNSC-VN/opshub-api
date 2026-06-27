@@ -1,10 +1,11 @@
+import { ApiProperty } from '@nestjs/swagger';
 import type { NotificationPreference } from '../../../domain/notification-preference.types';
 
 export class PreferenceResponseDto {
-  type!:      string;
-  inApp!:     boolean;
-  email!:     boolean;
-  updatedAt!: string;
+  @ApiProperty() type!:      string;
+  @ApiProperty() inApp!:     boolean;
+  @ApiProperty() email!:     boolean;
+  @ApiProperty() updatedAt!: string;
 
   static fromDomain(pref: NotificationPreference): PreferenceResponseDto {
     const dto = new PreferenceResponseDto();

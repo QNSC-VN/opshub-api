@@ -30,12 +30,12 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
         entraOid: input.entraOid ?? null,
       })
       .returning();
-    return row as Employee;
+    return row;
   }
 
   async findById(id: string): Promise<Employee | null> {
     const [row] = await this.db.select().from(employees).where(eq(employees.id, id)).limit(1);
-    return (row as Employee) ?? null;
+    return (row) ?? null;
   }
 
   async findByEmail(email: string): Promise<Employee | null> {
@@ -44,7 +44,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .from(employees)
       .where(eq(employees.email, email.toLowerCase()))
       .limit(1);
-    return (row as Employee) ?? null;
+    return (row) ?? null;
   }
 
   async findByEntraOid(oid: string): Promise<Employee | null> {
@@ -53,7 +53,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .from(employees)
       .where(eq(employees.entraOid, oid))
       .limit(1);
-    return (row as Employee) ?? null;
+    return (row) ?? null;
   }
 
   async upsertByEntraOid(
@@ -64,23 +64,35 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
     if (existing) {
       const [updated] = await this.db
         .update(employees)
-        .set({ displayName: input.displayName, email: input.email.toLowerCase(), updatedAt: new Date() })
+        .set({
+          displayName: input.displayName,
+          email: input.email.toLowerCase(),
+          // Sync roles from Entra claims on every login so Entra is the authority.
+          // Only update if caller passed roles (entraLogin always does).
+          ...(input.roles !== undefined && { roles: input.roles }),
+          updatedAt: new Date(),
+        })
         .where(eq(employees.entraOid, oid))
         .returning();
-      return updated as Employee;
+      return updated;
     }
 
     const byEmail = await this.findByEmail(input.email.toLowerCase());
     if (byEmail) {
       const [linked] = await this.db
         .update(employees)
-        .set({ entraOid: oid, displayName: input.displayName, updatedAt: new Date() })
+        .set({
+          entraOid: oid,
+          displayName: input.displayName,
+          ...(input.roles !== undefined && { roles: input.roles }),
+          updatedAt: new Date(),
+        })
         .where(eq(employees.id, byEmail.id))
         .returning();
-      return linked as Employee;
+      return linked;
     }
 
-    return this.create({ ...input, entraOid: oid, roles: [] });
+    return this.create({ ...input, entraOid: oid, roles: input.roles ?? [] });
   }
 
   async update(id: string, input: UpdateEmployeeInput): Promise<Employee> {
@@ -89,7 +101,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .set({ ...input, updatedAt: new Date() })
       .where(eq(employees.id, id))
       .returning();
-    return updated as Employee;
+    return updated;
   }
 
   async updateStatus(id: string, status: EmployeeStatus): Promise<Employee> {
@@ -98,7 +110,7 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .set({ status, updatedAt: new Date() })
       .where(eq(employees.id, id))
       .returning();
-    return updated as Employee;
+    return updated;
   }
 
   async list(
@@ -131,6 +143,13 @@ export class EmployeeDrizzleRepository implements IEmployeeRepository {
       .from(employees)
       .where(where);
 
-    return { rows: rows as Employee[], total: count };
+    return { rows: rows, total: count };
+  }
+
+  async updatePhoto(id: string, photoStorageKey: string | null): Promise<void> {
+    await this.db
+      .update(employees)
+      .set({ photoStorageKey, updatedAt: new Date() })
+      .where(eq(employees.id, id));
   }
 }

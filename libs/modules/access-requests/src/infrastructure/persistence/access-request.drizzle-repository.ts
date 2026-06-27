@@ -28,7 +28,7 @@ export class AccessRequestDrizzleRepository implements IAccessRequestRepository 
         requestId: input.requestId ?? null,
       })
       .returning();
-    return row as AccessRequest;
+    return row;
   }
 
   async findById(id: string): Promise<AccessRequest | null> {
@@ -37,7 +37,7 @@ export class AccessRequestDrizzleRepository implements IAccessRequestRepository 
       .from(accessRequests)
       .where(eq(accessRequests.id, id))
       .limit(1);
-    return (row as AccessRequest) ?? null;
+    return (row) ?? null;
   }
 
   async list(
@@ -64,7 +64,7 @@ export class AccessRequestDrizzleRepository implements IAccessRequestRepository 
       .from(accessRequests)
       .where(where);
 
-    return { rows: rows as AccessRequest[], total: count };
+    return { rows: rows, total: count };
   }
 
   async approve(
@@ -121,7 +121,7 @@ export class AccessRequestDrizzleRepository implements IAccessRequestRepository 
       .from(accessGrants)
       .where(eq(accessGrants.id, grantId))
       .limit(1);
-    return (row as AccessGrant) ?? null;
+    return (row) ?? null;
   }
 
   async listActiveGrants(granteeId: string): Promise<AccessGrant[]> {
@@ -136,6 +136,6 @@ export class AccessRequestDrizzleRepository implements IAccessRequestRepository 
         ),
       )
       .orderBy(desc(accessGrants.grantedAt));
-    return rows as AccessGrant[];
+    return rows;
   }
 }

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, lte, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, lte, gte, isNull, sql } from 'drizzle-orm';
 import { InjectDrizzle, type DrizzleDB } from '@platform';
 import { newId } from '@shared-kernel';
 import {
@@ -7,6 +7,7 @@ import {
   leaveRequests,
   overtimeEntries,
   shiftLogs,
+  attendanceLogs,
 } from '../../../../../../db/schema';
 import type { IWorkforceRepository } from '../../domain/ports/workforce.repository';
 import type {
@@ -25,6 +26,9 @@ import type {
   Timesheet,
   TimesheetFilters,
   TimesheetStatus,
+  AttendanceLog,
+  AttendanceFilters,
+  ClockInInput,
 } from '../../domain/workforce.types';
 
 @Injectable()
@@ -43,12 +47,12 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
         note: input.note ?? null,
       })
       .returning();
-    return row as Timesheet;
+    return row;
   }
 
   async findTimesheetById(id: string): Promise<Timesheet | null> {
     const [row] = await this.db.select().from(timesheets).where(eq(timesheets.id, id)).limit(1);
-    return (row as Timesheet) ?? null;
+    return (row) ?? null;
   }
 
   async listTimesheets(
@@ -73,7 +77,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .select({ count: sql<number>`count(*)::int` })
       .from(timesheets)
       .where(where);
-    return { rows: rows as Timesheet[], total: count };
+    return { rows: rows, total: count };
   }
 
   async setTimesheetStatus(
@@ -91,7 +95,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       })
       .where(eq(timesheets.id, id))
       .returning();
-    return (row as Timesheet) ?? null;
+    return (row) ?? null;
   }
 
   // ── Leave ──────────────────────────────────────────────────────────────────
@@ -108,7 +112,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
         requestId: input.requestId ?? null,
       })
       .returning();
-    return row as LeaveRequest;
+    return row;
   }
 
   async findLeaveById(id: string): Promise<LeaveRequest | null> {
@@ -117,7 +121,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .from(leaveRequests)
       .where(eq(leaveRequests.id, id))
       .limit(1);
-    return (row as LeaveRequest) ?? null;
+    return (row) ?? null;
   }
 
   async listLeave(
@@ -142,7 +146,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .select({ count: sql<number>`count(*)::int` })
       .from(leaveRequests)
       .where(where);
-    return { rows: rows as LeaveRequest[], total: count };
+    return { rows: rows, total: count };
   }
 
   async setLeaveStatus(
@@ -160,13 +164,20 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       })
       .where(eq(leaveRequests.id, id))
       .returning();
-    return (row as LeaveRequest) ?? null;
+    return (row) ?? null;
   }
 
   async setLeaveRequestId(id: string, requestId: string): Promise<void> {
     await this.db
       .update(leaveRequests)
       .set({ requestId })
+      .where(eq(leaveRequests.id, id));
+  }
+
+  async updateLeaveDocument(id: string, documentStorageKey: string | null): Promise<void> {
+    await this.db
+      .update(leaveRequests)
+      .set({ documentStorageKey })
       .where(eq(leaveRequests.id, id));
   }
 
@@ -202,7 +213,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
         requestId: input.requestId ?? null,
       })
       .returning();
-    return row as OvertimeEntry;
+    return row;
   }
 
   async findOvertimeById(id: string): Promise<OvertimeEntry | null> {
@@ -211,7 +222,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .from(overtimeEntries)
       .where(eq(overtimeEntries.id, id))
       .limit(1);
-    return (row as OvertimeEntry) ?? null;
+    return (row) ?? null;
   }
 
   async listOvertime(
@@ -236,7 +247,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .select({ count: sql<number>`count(*)::int` })
       .from(overtimeEntries)
       .where(where);
-    return { rows: rows as OvertimeEntry[], total: count };
+    return { rows: rows, total: count };
   }
 
   async setOvertimeStatus(
@@ -254,7 +265,7 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       })
       .where(eq(overtimeEntries.id, id))
       .returning();
-    return (row as OvertimeEntry) ?? null;
+    return (row) ?? null;
   }
 
   async setOvertimeRequestId(id: string, requestId: string): Promise<void> {
@@ -277,12 +288,12 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
         note: input.note ?? null,
       })
       .returning();
-    return row as ShiftLog;
+    return row;
   }
 
   async findShiftLogById(id: string): Promise<ShiftLog | null> {
     const [row] = await this.db.select().from(shiftLogs).where(eq(shiftLogs.id, id)).limit(1);
-    return (row as ShiftLog) ?? null;
+    return (row) ?? null;
   }
 
   async listShiftLogs(
@@ -307,6 +318,84 @@ export class WorkforceDrizzleRepository implements IWorkforceRepository {
       .select({ count: sql<number>`count(*)::int` })
       .from(shiftLogs)
       .where(where);
-    return { rows: rows as ShiftLog[], total: count };
+    return { rows: rows, total: count };
+  }
+
+  // ── Attendance ─────────────────────────────────────────────────────────────
+
+  async clockIn(input: ClockInInput): Promise<AttendanceLog> {
+    const [row] = await this.db
+      .insert(attendanceLogs)
+      .values({
+        id: newId(),
+        employeeId: input.employeeId,
+        clockedInAt: new Date(),
+        isRemote: input.isRemote ?? false,
+        notes: input.notes ?? null,
+      })
+      .returning();
+    return row;
+  }
+
+  async clockOut(attendanceId: string, notes?: string | null): Promise<AttendanceLog | null> {
+    const [existing] = await this.db
+      .select()
+      .from(attendanceLogs)
+      .where(eq(attendanceLogs.id, attendanceId))
+      .limit(1);
+
+    if (!existing || existing.clockedOutAt) return null;
+
+    const now = new Date();
+    const durationMs = now.getTime() - existing.clockedInAt.getTime();
+    const durationMinutes = Math.round(durationMs / 60_000);
+
+    const [row] = await this.db
+      .update(attendanceLogs)
+      .set({
+        clockedOutAt: now,
+        durationMinutes,
+        notes: notes ?? existing.notes,
+        updatedAt: now,
+      })
+      .where(eq(attendanceLogs.id, attendanceId))
+      .returning();
+    return row ?? null;
+  }
+
+  /** Find the open attendance record (clocked in, not yet out) for an employee. */
+  async findOpenAttendance(employeeId: string): Promise<AttendanceLog | null> {
+    const [row] = await this.db
+      .select()
+      .from(attendanceLogs)
+      .where(and(eq(attendanceLogs.employeeId, employeeId), isNull(attendanceLogs.clockedOutAt)))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async listAttendance(
+    filters: AttendanceFilters,
+    limit: number,
+    offset: number,
+  ): Promise<{ rows: AttendanceLog[]; total: number }> {
+    const conditions = [
+      filters.employeeId ? eq(attendanceLogs.employeeId, filters.employeeId) : undefined,
+      filters.fromDate ? gte(attendanceLogs.clockedInAt, filters.fromDate) : undefined,
+      filters.toDate ? lte(attendanceLogs.clockedInAt, filters.toDate) : undefined,
+    ].filter(Boolean);
+    const where = conditions.length ? and(...conditions) : undefined;
+
+    const rows = await this.db
+      .select()
+      .from(attendanceLogs)
+      .where(where)
+      .orderBy(desc(attendanceLogs.clockedInAt))
+      .limit(limit)
+      .offset(offset);
+    const [{ count }] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(attendanceLogs)
+      .where(where);
+    return { rows, total: count };
   }
 }

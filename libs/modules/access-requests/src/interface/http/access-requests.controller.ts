@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Auth, ApiCommonErrors, ApiPagedResponse, buildPageResult, CurrentUser } from '@platform';
 import type { JwtPayload, PagedResult } from '@platform';
 import { AuditService } from '@modules/audit';
@@ -69,6 +69,7 @@ export class AccessRequestsController {
   @Get(':id')
   @Auth()
   @ApiOperation({ summary: 'Get an access request by id' })
+  @ApiOkResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 404)
   async getById(@Param('id') id: string): Promise<AccessRequestResponseDto> {
     return toDto(await this.service.getById(id));
@@ -77,6 +78,7 @@ export class AccessRequestsController {
   @Post()
   @Auth()
   @ApiOperation({ summary: 'Submit a privileged-access request' })
+  @ApiCreatedResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 422)
   async submit(
     @Body() dto: SubmitAccessRequestDto,
@@ -97,6 +99,7 @@ export class AccessRequestsController {
   @Post(':id/approve')
   @Auth('it-admin', 'security')
   @ApiOperation({ summary: 'Approve a request and issue a time-boxed grant' })
+  @ApiCreatedResponse({ type: AccessGrantResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
   async approve(
     @Param('id') id: string,
@@ -118,6 +121,7 @@ export class AccessRequestsController {
   @Post(':id/reject')
   @Auth('it-admin', 'security')
   @ApiOperation({ summary: 'Reject a pending request' })
+  @ApiOkResponse({ type: AccessRequestResponseDto })
   @ApiCommonErrors(401, 403, 404, 412)
   async reject(
     @Param('id') id: string,
@@ -139,6 +143,7 @@ export class AccessRequestsController {
   @Post('grants/:grantId/revoke')
   @Auth('it-admin', 'security')
   @ApiOperation({ summary: 'Revoke an active grant' })
+  @ApiOkResponse({ schema: { type: 'object', properties: { status: { type: 'string' } } } })
   @ApiCommonErrors(401, 403, 404, 412)
   async revoke(
     @Param('grantId') grantId: string,
@@ -158,6 +163,7 @@ export class AccessRequestsController {
   @Get('grants/me/active')
   @Auth()
   @ApiOperation({ summary: 'List my active grants' })
+  @ApiOkResponse({ type: [AccessGrantResponseDto] })
   @ApiCommonErrors(401)
   async myGrants(@CurrentUser() user: JwtPayload): Promise<AccessGrantResponseDto[]> {
     return (await this.service.listActiveGrants(user.sub)).map(toGrantDto);

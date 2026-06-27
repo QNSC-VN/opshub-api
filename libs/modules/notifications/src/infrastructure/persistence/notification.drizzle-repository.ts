@@ -120,7 +120,7 @@ export class NotificationDrizzleRepository implements INotificationRepository {
       body:          row.body,
       resourceType:  row.resourceType,
       resourceId:    row.resourceId,
-      metadata:      row.metadata as Record<string, unknown>,
+      metadata:      row.metadata,
       isRead:        row.isRead,
       readAt:        row.readAt,
       createdAt:     row.createdAt,

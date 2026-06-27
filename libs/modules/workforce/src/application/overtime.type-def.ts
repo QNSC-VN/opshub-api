@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { type DbExecutor, RequestRegistry, RequestTypeDef } from '@platform';
+import { REQUEST_TYPE } from '@shared-kernel';
 import { overtimeEntries } from '../../../../../db/schema';
 
 export interface OvertimePayload extends Record<string, unknown> {
@@ -19,7 +20,7 @@ export interface OvertimePayload extends Record<string, unknown> {
 export class OvertimeTypeDef
   implements RequestTypeDef<OvertimePayload>, OnModuleInit
 {
-  readonly type = 'overtime';
+  readonly type = REQUEST_TYPE.OVERTIME;
   readonly requiredApprovalPermission = 'workforce.overtime.review';
   readonly allowSelfApproval = false;
   readonly defaultExpiryHours = 72; // 3 days

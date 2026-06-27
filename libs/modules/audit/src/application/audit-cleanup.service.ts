@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { MS_PER_DAY } from '@shared-kernel';
 import { AUDIT_REPOSITORY, type IAuditRepository } from '../domain/ports/audit.repository';
 
 /**
@@ -28,7 +29,7 @@ export class AuditCleanupService {
     }
     this.isRunning = true;
     try {
-      const cutoff = new Date(Date.now() - this.retentionDays * 86_400_000);
+      const cutoff = new Date(Date.now() - this.retentionDays * MS_PER_DAY);
       const deleted = await this.auditRepo.deleteOlderThan(cutoff);
       if (deleted > 0) {
         this.logger.log(

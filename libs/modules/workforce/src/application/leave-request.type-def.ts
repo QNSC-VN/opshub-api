@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { type DbExecutor, RequestRegistry, RequestTypeDef } from '@platform';
+import { REQUEST_TYPE } from '@shared-kernel';
 import { leaveRequests } from '../../../../../db/schema';
 
 export interface LeaveRequestPayload extends Record<string, unknown> {
@@ -21,7 +22,7 @@ export interface LeaveRequestPayload extends Record<string, unknown> {
 export class LeaveRequestTypeDef
   implements RequestTypeDef<LeaveRequestPayload>, OnModuleInit
 {
-  readonly type = 'leave_request';
+  readonly type = REQUEST_TYPE.LEAVE_REQUEST;
   readonly requiredApprovalPermission = 'workforce.leave.review';
   readonly allowSelfApproval = false;
   readonly defaultExpiryHours = 72; // 3 days

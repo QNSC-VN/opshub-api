@@ -74,7 +74,9 @@ describe('OffboardingTypeDef.onApprove()', () => {
   let typeDef: OffboardingTypeDef;
 
   beforeEach(() => {
-    typeDef = new OffboardingTypeDef({ register: vi.fn() } as never);
+    const mockDb = { select: vi.fn().mockReturnThis(), from: vi.fn().mockReturnThis(), where: vi.fn().mockReturnThis(), limit: vi.fn().mockResolvedValue([]) };
+    const mockGraph = { isEnabled: vi.fn().mockReturnValue(false), disableEntraUser: vi.fn(), enableEntraUser: vi.fn() };
+    typeDef = new OffboardingTypeDef({ register: vi.fn() } as never, mockDb as never, mockGraph as never);
   });
 
   it('updates employees table (sets status → offboarded)', async () => {
@@ -103,6 +105,7 @@ describe('OffboardingTypeDef.onApprove()', () => {
     const grantCall = tx._updateCalls.find((c) => c.table === accessGrants);
     expect(grantCall).toBeDefined();
     expect(grantCall!.chain.set).toHaveBeenCalledWith(
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       expect.objectContaining({ revokedAt: expect.any(Date) }),
     );
   });
@@ -114,6 +117,7 @@ describe('OffboardingTypeDef.onApprove()', () => {
     const assignmentCall = tx._updateCalls.find((c) => c.table === assetAssignments);
     expect(assignmentCall).toBeDefined();
     expect(assignmentCall!.chain.set).toHaveBeenCalledWith(
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       expect.objectContaining({ returnedAt: expect.any(Date) }),
     );
   });

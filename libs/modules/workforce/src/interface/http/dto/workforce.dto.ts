@@ -138,6 +138,16 @@ export const SubmitOnboardingSchema = z.object({
   startDate: dateStr,
   department: z.string().max(120).optional(),
   jobTitle: z.string().max(120).optional(),
+  /** Display name of the direct manager (informational, for IT provisioning context). */
+  managerName: z.string().max(120).optional(),
+  /** Requested device form-factor: laptop | desktop | remote_only | byod */
+  equipmentType: z.enum(['laptop', 'desktop', 'remote_only', 'byod']).optional(),
+  /** Preferred OS: windows | macos | linux */
+  preferredOs: z.enum(['windows', 'macos', 'linux']).optional(),
+  /** Free-text equipment notes for IT (peripherals, special requirements, etc.). */
+  equipmentNote: z.string().max(500).optional(),
+  /** Systems / apps the new hire needs access to on day one. */
+  accessNeeds: z.array(z.string().max(80)).max(20).optional(),
 });
 export class SubmitOnboardingDto extends createZodDto(SubmitOnboardingSchema) {}
 
@@ -159,3 +169,15 @@ export class OffboardingResponseDto {
   /** Engine request ID — use this to track approval progress. */
   requestId!: string;
 }
+
+export const PresignLeaveDocumentSchema = z.object({
+  fileName: z.string().min(1).max(255),
+  mimeType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
+  sizeBytes: z.number().int().positive().max(10 * 1024 * 1024),
+});
+export class PresignLeaveDocumentDto extends createZodDto(PresignLeaveDocumentSchema) {}
+
+export const ConfirmLeaveDocumentSchema = z.object({
+  fileId: z.string().uuid(),
+});
+export class ConfirmLeaveDocumentDto extends createZodDto(ConfirmLeaveDocumentSchema) {}

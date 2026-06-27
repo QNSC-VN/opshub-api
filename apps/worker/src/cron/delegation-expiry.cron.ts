@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { DelegationService } from '@platform';
+import { MS_PER_DAY } from '@shared-kernel';
+
+/** Expired delegations are retained for this many days for audit purposes before purging. */
+const DELEGATION_RETENTION_DAYS = 7;
 
 /**
  * DelegationExpiryCron — purges expired approval delegation records.
@@ -18,8 +22,8 @@ export class DelegationExpiryCron {
 
   @Interval(60 * 60_000) // hourly
   async tick(): Promise<void> {
-    // Retain expired delegations for 7 days for audit purposes, then purge
-    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60_000);
+    // Retain expired delegations for DELEGATION_RETENTION_DAYS after expiry, then purge
+    const cutoff = new Date(Date.now() - DELEGATION_RETENTION_DAYS * MS_PER_DAY);
     const deleted = await this.delegation.deleteExpiredBefore(cutoff);
     if (deleted > 0) {
       this.logger.log(`Purged ${deleted} expired approval delegation(s)`);

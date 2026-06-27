@@ -6,7 +6,7 @@
  * callback with the same mock object so queries inside transactions are
  * intercepted identically.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { RequestEngine } from './request-engine.service';
 import type { RequestItem } from './request-engine.types';
 import {
@@ -98,13 +98,12 @@ function buildEngine(opts: {
   const insertChain = makeQueryChain([{ id: 'approval-1' }]);
   const updateChain = makeQueryChain([requestRow]);
 
-  const countChain = makeQueryChain([{ count: 0 }]);
-
   const db = {
     select: vi.fn().mockReturnValue(selectChain),
     insert: vi.fn().mockReturnValue(insertChain),
     update: vi.fn().mockReturnValue(updateChain),
     delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
+    // eslint-disable-next-line @typescript-eslint/require-await
     transaction: vi.fn().mockImplementation(async (cb: (tx: typeof db) => unknown) => cb(db)),
   };
 
@@ -131,10 +130,10 @@ function buildEngine(opts: {
     db as never,
     registry as never,
     authz as never,
-    outbox as never,
+    outbox,
     delegation as never,
     notifScheduler as never,
-    webhookEnqueue as never,
+    webhookEnqueue,
   );
 
   return { engine, db, registry, authz, outbox, webhookEnqueue, delegation, notifScheduler, updateChain, insertChain };
@@ -195,9 +194,9 @@ describe('RequestEngine.submit()', () => {
     await engine.submit('leave', {}, REQUESTER);
     const after = Date.now();
 
-    const insertValues = (insertChain['values'] as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
-    expect(insertValues.expiresAt).toBeDefined();
-    const expiresMs = (insertValues.expiresAt as Date).getTime();
+    const insertValues = (insertChain['values'] as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(insertValues['expiresAt']).toBeDefined();
+    const expiresMs = (insertValues['expiresAt'] as Date).getTime();
     expect(expiresMs).toBeGreaterThanOrEqual(before + 48 * 3_600_000 - 100);
     expect(expiresMs).toBeLessThanOrEqual(after + 48 * 3_600_000 + 100);
   });
@@ -217,8 +216,8 @@ describe('RequestEngine.submit()', () => {
 
     await engine.submit('onboarding', {}, REQUESTER);
 
-    const insertValues = (insertChain['values'] as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
-    expect(insertValues.totalSteps).toBe(3);
+    const insertValues = (insertChain['values'] as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(insertValues['totalSteps']).toBe(3);
   });
 });
 

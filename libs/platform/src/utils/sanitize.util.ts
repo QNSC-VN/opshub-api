@@ -16,14 +16,14 @@ export function sanitizeObject<T extends Record<string, unknown>>(obj: T): T {
     if (typeof v === 'string') {
       out[k] = sanitizeString(v);
     } else if (Array.isArray(v)) {
-      out[k] = v.map((item) =>
+      out[k] = (v as unknown[]).map((item) =>
         typeof item === 'string'
           ? sanitizeString(item)
-          : item && typeof item === 'object' && item.constructor === Object
+          : item !== null && typeof item === 'object' && Object.getPrototypeOf(item) === Object.prototype
             ? sanitizeObject(item as Record<string, unknown>)
             : item,
       );
-    } else if (v && typeof v === 'object' && v.constructor === Object) {
+    } else if (v !== null && typeof v === 'object' && Object.getPrototypeOf(v) === Object.prototype) {
       out[k] = sanitizeObject(v as Record<string, unknown>);
     } else {
       out[k] = v;

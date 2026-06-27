@@ -77,6 +77,13 @@ export const ErrorCodes = {
   // Outbound Webhooks
   WEBHOOK_NOT_FOUND: 'WEBHOOK_NOT_FOUND',
   DELIVERY_NOT_FOUND: 'DELIVERY_NOT_FOUND',
+
+  // Storage / File uploads
+  FILE_NOT_FOUND: 'FILE_NOT_FOUND',
+  FILE_NOT_UPLOADED: 'FILE_NOT_UPLOADED',
+  FILE_TOO_LARGE: 'FILE_TOO_LARGE',
+  FILE_TYPE_NOT_ALLOWED: 'FILE_TYPE_NOT_ALLOWED',
+  FILE_SIZE_MISMATCH: 'FILE_SIZE_MISMATCH',
 } as const;
 
 export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

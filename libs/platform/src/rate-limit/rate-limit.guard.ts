@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { createHash } from 'node:crypto';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { CacheService } from '../cache/cache.service';
 import {
@@ -20,9 +21,13 @@ import type { JwtPayload } from '../auth/jwt.strategy';
 /**
  * Atomic sliding-window rate limiter using Redis sorted sets.
  *
- * Key design:
- *  - Pre-auth requests  → keyed by client IP (best we can do without identity)
- *  - Post-auth requests → keyed by userId    (fair for corporate NAT scenarios)
+ * Key strategy (controlled by tier.keyBy):
+ *  - 'userId'       — post-auth requests; NAT-safe per-user bucket (default for authenticated routes)
+ *  - 'ip'           — pre-auth requests where no identity is available (AUTH_LOGIN)
+ *  - 'refreshToken' — SHA-256 of the HttpOnly refresh cookie; per-session bucket that is
+ *                     NAT-safe without requiring a decoded JWT (AUTH_REFRESH)
+ *  - fallback: userId if present, else IP
+ *
  *  - Graceful degradation: if Redis is unavailable, allow request through
  *  - RFC 6585 + draft-ietf-httpapi-ratelimit-headers compliant response headers
  */
@@ -69,20 +74,41 @@ export class RateLimitGuard implements CanActivate {
         context.getHandler(),
         context.getClass(),
       ]) ?? 'DEFAULT'
-    ) as RateLimitTierName;
-    const tier = RATE_LIMIT_TIERS[tierName];
+    );
+    const tier = RATE_LIMIT_TIERS[tierName] as import('./rate-limit.constants').RateLimitTier;
 
     const req = context.switchToHttp().getRequest<FastifyRequest & { user?: JwtPayload }>();
     const res = context.switchToHttp().getResponse<FastifyReply>();
 
-    // Post-auth: keyed by userId for NAT fairness; pre-auth: keyed by IP
     const userId = req.user?.sub;
     const ip =
       (req.headers['x-real-ip'] as string) ??
       (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ??
       req.ip ??
       'unknown';
-    const rateLimitKey = `rl:${tierName}:${userId ?? ip}`;
+
+    let rateLimitKey: string;
+    switch (tier.keyBy) {
+      case 'ip':
+        rateLimitKey = `rl:${tierName}:${ip}`;
+        break;
+      case 'refreshToken': {
+        // Hash the HttpOnly cookie so the raw token never appears in Redis keys.
+        // Falls back to IP if the cookie is absent (unauthenticated probe).
+        const rawCookie = (req.cookies as Record<string, string> | undefined)?.['refresh_token'];
+        const sessionKey = rawCookie
+          ? createHash('sha256').update(rawCookie).digest('hex').slice(0, 32)
+          : ip;
+        rateLimitKey = `rl:${tierName}:${sessionKey}`;
+        break;
+      }
+      case 'userId':
+        rateLimitKey = `rl:${tierName}:${userId ?? ip}`;
+        break;
+      default:
+        // Default: userId when authenticated (NAT-safe), IP otherwise
+        rateLimitKey = `rl:${tierName}:${userId ?? ip}`;
+    }
 
     // Degrade gracefully when Redis is unavailable
     if (!this.cache.isAvailable || !this.cache.redis) {

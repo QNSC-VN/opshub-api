@@ -6,6 +6,7 @@ import { softwareCatalog, complianceFindings } from '../../../../../../db/schema
 import type { IComplianceRepository } from '../../domain/ports/compliance.repository';
 import type {
   ComplianceFinding,
+  CreateFindingInput,
   FindingFilters,
   FindingStatus,
   SoftwareCatalogEntry,
@@ -28,7 +29,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
         notes: input.notes ?? null,
       })
       .returning();
-    return row as SoftwareCatalogEntry;
+    return row;
   }
 
   async findSoftwareById(id: string): Promise<SoftwareCatalogEntry | null> {
@@ -37,7 +38,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       .from(softwareCatalog)
       .where(eq(softwareCatalog.id, id))
       .limit(1);
-    return (row as SoftwareCatalogEntry) ?? null;
+    return (row) ?? null;
   }
 
   async findSoftwareByName(name: string): Promise<SoftwareCatalogEntry | null> {
@@ -46,7 +47,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       .from(softwareCatalog)
       .where(eq(softwareCatalog.name, name))
       .limit(1);
-    return (row as SoftwareCatalogEntry) ?? null;
+    return (row) ?? null;
   }
 
   async updateSoftware(
@@ -64,7 +65,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       })
       .where(eq(softwareCatalog.id, id))
       .returning();
-    return (row as SoftwareCatalogEntry) ?? null;
+    return (row) ?? null;
   }
 
   async listSoftware(
@@ -91,7 +92,24 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       .from(softwareCatalog)
       .where(where);
 
-    return { rows: rows as SoftwareCatalogEntry[], total: count };
+    return { rows: rows, total: count };
+  }
+
+  async createFinding(input: CreateFindingInput): Promise<ComplianceFinding> {
+    const [row] = await this.db
+      .insert(complianceFindings)
+      .values({
+        id: newId(),
+        assetId: input.assetId ?? null,
+        employeeId: input.employeeId ?? null,
+        softwareName: input.softwareName,
+        softwareVersion: input.softwareVersion ?? null,
+        severity: input.severity,
+        source: input.source,
+        detectedAt: input.detectedAt ?? new Date(),
+      })
+      .returning();
+    return row!;
   }
 
   async findFindingById(id: string): Promise<ComplianceFinding | null> {
@@ -100,7 +118,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       .from(complianceFindings)
       .where(eq(complianceFindings.id, id))
       .limit(1);
-    return (row as ComplianceFinding) ?? null;
+    return (row) ?? null;
   }
 
   async listFindings(
@@ -129,7 +147,7 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       .from(complianceFindings)
       .where(where);
 
-    return { rows: rows as ComplianceFinding[], total: count };
+    return { rows: rows, total: count };
   }
 
   async setFindingStatus(
@@ -149,6 +167,6 @@ export class ComplianceDrizzleRepository implements IComplianceRepository {
       })
       .where(eq(complianceFindings.id, id))
       .returning();
-    return (row as ComplianceFinding) ?? null;
+    return (row) ?? null;
   }
 }

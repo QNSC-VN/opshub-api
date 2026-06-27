@@ -39,7 +39,7 @@ export class NotificationSchedulerService {
         status:         'pending',
         idempotencyKey: input.idempotencyKey ?? null,
       })
-      .onConflictDoNothing({ target: notificationOutbox.idempotencyKey });
+      .onConflictDoNothing();
 
     // Best-effort wake signal — reduces relay latency from ≤5s to ~ms.
     // Fire-and-forget; correctness is guaranteed by cron polling regardless.

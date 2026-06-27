@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Param, Query, Body, ParseUUIDPipe, HttpCode } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
 import {
   Auth,
   CurrentUser,
@@ -11,6 +11,7 @@ import {
   ErrorCodes,
   type RequestItemWithApprovals,
   type RequestComment,
+  ApiPagedResponse,
 } from '@platform';
 import { AuditService } from '@modules/audit';
 import {
@@ -93,6 +94,7 @@ export class RequestsController {
   @Get()
   @Auth()
   @ApiOperation({ summary: 'List request items (unified inbox)' })
+  @ApiPagedResponse(RequestItemResponseDto)
   async list(
     @Query() query: ListRequestsQueryDto,
     @CurrentUser() user: JwtPayload,
@@ -100,7 +102,7 @@ export class RequestsController {
     const { rows, total } = await this.engine.list(
       {
         type: query.type,
-        status: query.status as any,
+        status: query.status,
         requesterId: query.requesterId,
         myQueue: query.myQueue,
       },
@@ -117,6 +119,7 @@ export class RequestsController {
   @Get(':id')
   @Auth()
   @ApiOperation({ summary: 'Get request item with approval history' })
+  @ApiOkResponse({ type: RequestItemResponseDto })
   async getById(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<RequestItemResponseDto> {
@@ -127,6 +130,7 @@ export class RequestsController {
   @Post(':id/approve')
   @Auth()
   @ApiOperation({ summary: 'Approve a pending request' })
+  @ApiOkResponse({ type: RequestItemResponseDto })
   async approve(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReviewRequestDto,
@@ -148,6 +152,7 @@ export class RequestsController {
   @Post(':id/reject')
   @Auth()
   @ApiOperation({ summary: 'Reject a pending request' })
+  @ApiOkResponse({ type: RequestItemResponseDto })
   async reject(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReviewRequestDto,
@@ -169,6 +174,7 @@ export class RequestsController {
   @Post(':id/cancel')
   @Auth()
   @ApiOperation({ summary: 'Cancel a pending request' })
+  @ApiOkResponse({ type: RequestItemResponseDto })
   async cancel(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReviewRequestDto,
@@ -194,6 +200,7 @@ export class RequestsController {
   @Get(':id/comments')
   @Auth()
   @ApiOperation({ summary: 'List comments on a request' })
+  @ApiOkResponse({ type: [RequestCommentResponseDto] })
   async listComments(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<RequestCommentResponseDto[]> {
@@ -208,6 +215,7 @@ export class RequestsController {
   @Auth()
   @HttpCode(201)
   @ApiOperation({ summary: 'Post a comment on a request' })
+  @ApiCreatedResponse({ type: RequestCommentResponseDto })
   async addComment(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AddCommentDto,

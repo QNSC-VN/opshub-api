@@ -5,8 +5,11 @@ import {
   PreconditionFailedException,
   ErrorCodes,
   RequestEngine,
+  StorageService,
 } from '@platform';
+import type { PresignUploadResult } from '@platform';
 import { AuditService } from '@modules/audit';
+import { MS_PER_HOUR } from '@shared-kernel';
 import {
   WORKFORCE_REPOSITORY,
   type IWorkforceRepository,
@@ -38,6 +41,7 @@ export class WorkforceService {
     @Inject(WORKFORCE_REPOSITORY) private readonly repo: IWorkforceRepository,
     private readonly audit: AuditService,
     private readonly engine: RequestEngine,
+    private readonly storage: StorageService,
   ) {}
 
   // ── Timesheets ─────────────────────────────────────────────────────────────
@@ -129,7 +133,7 @@ export class WorkforceService {
       reason: leave.reason,
     };
     const engineItem = await this.engine.submit('leave_request', enginePayload, actor, {
-      expiresAt: new Date(Date.now() + 72 * 3_600_000),
+      expiresAt: new Date(Date.now() + 72 * MS_PER_HOUR), // 3-day review window
     });
 
     await this.repo.setLeaveRequestId(leave.id, engineItem.id);
@@ -217,7 +221,7 @@ export class WorkforceService {
       reason: entry.reason,
     };
     const engineItem = await this.engine.submit('overtime', enginePayload, actor, {
-      expiresAt: new Date(Date.now() + 72 * 3_600_000),
+      expiresAt: new Date(Date.now() + 72 * MS_PER_HOUR), // 3-day review window
     });
 
     await this.repo.setOvertimeRequestId(entry.id, engineItem.id);
@@ -306,7 +310,18 @@ export class WorkforceService {
    * Returns the engine request ID so the caller can track progress.
    */
   async submitOnboarding(
-    input: { employeeId: string; employeeEmail: string; startDate: string; department?: string; jobTitle?: string },
+    input: {
+      employeeId: string;
+      employeeEmail: string;
+      startDate: string;
+      department?: string;
+      jobTitle?: string;
+      managerName?: string;
+      equipmentType?: string;
+      preferredOs?: string;
+      equipmentNote?: string;
+      accessNeeds?: string[];
+    },
     actor: Actor,
   ): Promise<string> {
     const payload: OnboardingPayload = {
@@ -315,6 +330,11 @@ export class WorkforceService {
       startDate: input.startDate,
       ...(input.department && { department: input.department }),
       ...(input.jobTitle && { jobTitle: input.jobTitle }),
+      ...(input.managerName && { managerName: input.managerName }),
+      ...(input.equipmentType && { equipmentType: input.equipmentType }),
+      ...(input.preferredOs && { preferredOs: input.preferredOs }),
+      ...(input.equipmentNote && { equipmentNote: input.equipmentNote }),
+      ...(input.accessNeeds?.length && { accessNeeds: input.accessNeeds }),
     };
     const item = await this.engine.submit('onboarding', payload, actor);
     await this.audit.record({
@@ -354,5 +374,67 @@ export class WorkforceService {
       metadata: { requestId: item.id, reason: input.reason },
     });
     return item.id;
+  }
+
+  // ── Leave document upload ─────────────────────────────────────────────────
+
+  /** Step 1 — returns a presigned S3 PUT URL for the client to upload to. */
+  async presignLeaveDocument(
+    leaveId: string,
+    input: { fileName: string; mimeType: string; sizeBytes: number },
+    actor: Actor,
+  ): Promise<PresignUploadResult> {
+    const leave = await this.repo.findLeaveById(leaveId);
+    if (!leave) throw new NotFoundException(ErrorCodes.LEAVE_REQUEST_NOT_FOUND, 'Leave request not found');
+    return this.storage.presignUpload(
+      {
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        resourceType: 'leave-document',
+        linkedEntityType: 'leave_request',
+        linkedEntityId: leaveId,
+      },
+      actor.sub,
+    );
+  }
+
+  /** Step 3 — verify upload and link the S3 key to the leave request. */
+  async confirmLeaveDocument(
+    leaveId: string,
+    fileId: string,
+    actor: Actor,
+  ): Promise<{ documentUrl: string }> {
+    const leave = await this.repo.findLeaveById(leaveId);
+    if (!leave) throw new NotFoundException(ErrorCodes.LEAVE_REQUEST_NOT_FOUND, 'Leave request not found');
+
+    const result = await this.storage.confirmUpload(fileId, actor.sub);
+
+    // Soft-delete old document if replaced
+    if (leave.documentStorageKey) {
+      const old = await this.storage.findById(leave.documentStorageKey);
+      if (old) void this.storage.deleteFile(old.id, old.uploaderId);
+    }
+
+    await this.repo.updateLeaveDocument(leaveId, result.key);
+
+    void this.audit.record({
+      actorId: actor.sub,
+      actorEmail: actor.email,
+      action: 'leave.document_uploaded',
+      resourceType: 'leave_request',
+      resourceId: leaveId,
+    });
+
+    return { documentUrl: result.url };
+  }
+
+  /** Returns a time-limited download URL for the leave supporting document. */
+  async getLeaveDocumentUrl(leaveId: string): Promise<{ documentUrl: string | null }> {
+    const leave = await this.repo.findLeaveById(leaveId);
+    if (!leave) throw new NotFoundException(ErrorCodes.LEAVE_REQUEST_NOT_FOUND, 'Leave request not found');
+    if (!leave.documentStorageKey) return { documentUrl: null };
+    const url = await this.storage.presignGet(leave.documentStorageKey);
+    return { documentUrl: url };
   }
 }

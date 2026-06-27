@@ -9,6 +9,7 @@ import { type IEmailProvider, type EmailPayload } from '../email.provider';
 export class DevEmailProvider implements IEmailProvider {
   private readonly logger = new Logger(DevEmailProvider.name);
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async send(payload: EmailPayload): Promise<void> {
     this.logger.log(
       {

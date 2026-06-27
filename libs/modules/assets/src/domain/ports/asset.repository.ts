@@ -17,4 +17,7 @@ export interface IAssetRepository {
   retire(assetId: string): Promise<void>;
 
   listAssignments(assetId: string): Promise<AssetAssignment[]>;
+
+  /** Update the S3 object key for the asset photo. Pass null to clear. */
+  updatePhoto(assetId: string, photoStorageKey: string | null): Promise<void>;
 }

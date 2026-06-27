@@ -23,6 +23,8 @@ import {
   OnboardingResponseDto,
   SubmitOffboardingDto,
   OffboardingResponseDto,
+  PresignLeaveDocumentDto,
+  ConfirmLeaveDocumentDto,
 } from './dto/workforce.dto';
 import type {
   LeaveRequest,
@@ -361,6 +363,11 @@ export class WorkforceController {
         startDate: dto.startDate,
         department: dto.department,
         jobTitle: dto.jobTitle,
+        managerName: dto.managerName,
+        equipmentType: dto.equipmentType,
+        preferredOs: dto.preferredOs,
+        equipmentNote: dto.equipmentNote,
+        accessNeeds: dto.accessNeeds,
       },
       user,
     );
@@ -388,5 +395,42 @@ export class WorkforceController {
       user,
     );
     return { requestId };
+  }
+
+  // ── Leave document upload ─────────────────────────────────────────────
+
+  @Post('leave-requests/:id/document/presign')
+  @Auth()
+  @ApiOperation({ summary: 'Get a presigned S3 PUT URL to upload a leave supporting document (e.g. medical certificate)' })
+  @ApiResponse({ status: 200, schema: { properties: { fileId: { type: 'string' }, uploadUrl: { type: 'string' }, key: { type: 'string' } }, required: ['fileId', 'uploadUrl', 'key'] } })
+  @ApiCommonErrors(401, 404, 422)
+  async presignLeaveDocument(
+    @Param('id') id: string,
+    @Body() dto: PresignLeaveDocumentDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.presignLeaveDocument(id, dto, user);
+  }
+
+  @Post('leave-requests/:id/document/confirm')
+  @Auth()
+  @ApiOperation({ summary: 'Confirm leave document upload completed' })
+  @ApiResponse({ status: 200, schema: { properties: { documentUrl: { type: 'string' } }, required: ['documentUrl'] } })
+  @ApiCommonErrors(401, 404, 422)
+  async confirmLeaveDocument(
+    @Param('id') id: string,
+    @Body() dto: ConfirmLeaveDocumentDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.confirmLeaveDocument(id, dto.fileId, user);
+  }
+
+  @Get('leave-requests/:id/document')
+  @Auth()
+  @ApiOperation({ summary: 'Get a time-limited download URL for the leave supporting document' })
+  @ApiResponse({ status: 200, schema: { properties: { documentUrl: { type: 'string', nullable: true } }, required: ['documentUrl'] } })
+  @ApiCommonErrors(401, 404)
+  async getLeaveDocumentUrl(@Param('id') id: string) {
+    return this.service.getLeaveDocumentUrl(id);
   }
 }

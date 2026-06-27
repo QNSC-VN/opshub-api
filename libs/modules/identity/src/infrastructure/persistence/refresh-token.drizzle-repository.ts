@@ -25,7 +25,7 @@ export class RefreshTokenDrizzleRepository implements IRefreshTokenRepository {
       .from(refreshTokens)
       .where(eq(refreshTokens.tokenHash, hash))
       .limit(1);
-    return (row as RefreshToken) ?? null;
+    return (row) ?? null;
   }
 
   async revokeById(id: string): Promise<void> {

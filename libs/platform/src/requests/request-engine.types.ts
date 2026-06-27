@@ -165,4 +165,10 @@ export interface RequestTypeDef<TPayload = Record<string, unknown>> {
   onCancel?(payload: TPayload, requestId: string, cancelledBy: string, tx: DbExecutor): Promise<void>;
   /** Called inside the expiry transaction (from the worker's expiry cron). */
   onExpire?(payload: TPayload, requestId: string, tx: DbExecutor): Promise<void>;
+  /**
+   * Optional post-transaction hook called AFTER the approval transaction commits.
+   * Use for external API calls (Graph, GitHub, etc.) that must not hold the DB tx open.
+   * Failures are logged but do NOT roll back the already-committed DB state.
+   */
+  afterApprove?(payload: TPayload, requestId: string, approverId: string): Promise<void>;
 }

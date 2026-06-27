@@ -18,13 +18,13 @@ async function main(): Promise<void> {
   // CREATE TABLE, indexes, FKs). Do NOT pre-create schemas here — that would
   // cause the migration to fail with "schema already exists".
   await migrate(db, { migrationsFolder: './db/migrations' });
-  // eslint-disable-next-line no-console
+   
   console.log('✅ Migrations applied');
   await pool.end();
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
+   
   console.error('❌ Migration failed', err);
   process.exit(1);
 });

@@ -14,6 +14,9 @@ import type {
   Timesheet,
   TimesheetFilters,
   TimesheetStatus,
+  AttendanceLog,
+  AttendanceFilters,
+  ClockInInput,
 } from '../workforce.types';
 
 export const WORKFORCE_REPOSITORY = Symbol('WORKFORCE_REPOSITORY');
@@ -48,6 +51,8 @@ export interface IWorkforceRepository {
   ): Promise<LeaveRequest | null>;
   /** Backlink the engine request_items id into the domain row. */
   setLeaveRequestId(id: string, requestId: string): Promise<void>;
+  /** Update the S3 object key for the leave supporting document. Pass null to clear. */
+  updateLeaveDocument(id: string, documentStorageKey: string | null): Promise<void>;
   hasOverlappingLeave(
     employeeId: string,
     startDate: string,
@@ -78,4 +83,14 @@ export interface IWorkforceRepository {
     limit: number,
     offset: number,
   ): Promise<{ rows: ShiftLog[]; total: number }>;
+
+  // Attendance
+  clockIn(input: ClockInInput): Promise<AttendanceLog>;
+  clockOut(attendanceId: string, notes?: string | null): Promise<AttendanceLog | null>;
+  findOpenAttendance(employeeId: string): Promise<AttendanceLog | null>;
+  listAttendance(
+    filters: AttendanceFilters,
+    limit: number,
+    offset: number,
+  ): Promise<{ rows: AttendanceLog[]; total: number }>;
 }

@@ -46,6 +46,8 @@ export interface LeaveRequest {
   startDate: string;
   endDate: string;
   reason: string | null;
+  /** S3 key for a supporting document (e.g. medical cert). Null until uploaded. */
+  documentStorageKey: string | null;
   status: LeaveStatus;
   reviewerId: string | null;
   reviewedAt: Date | null;
@@ -118,4 +120,35 @@ export interface CreateShiftLogInput {
 export interface ShiftLogFilters {
   employeeId?: string;
   shiftType?: ShiftType;
+}
+
+// ── Attendance ────────────────────────────────────────────────────────────────
+
+export interface AttendanceLog {
+  id: string;
+  employeeId: string;
+  clockedInAt: Date;
+  clockedOutAt: Date | null;
+  durationMinutes: number | null;
+  isRemote: boolean;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ClockInInput {
+  employeeId: string;
+  isRemote?: boolean;
+  notes?: string | null;
+}
+
+export interface ClockOutInput {
+  attendanceId: string;
+  notes?: string | null;
+}
+
+export interface AttendanceFilters {
+  employeeId?: string;
+  fromDate?: Date;
+  toDate?: Date;
 }

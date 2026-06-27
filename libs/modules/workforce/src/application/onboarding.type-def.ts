@@ -1,5 +1,9 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { type DbExecutor, RequestRegistry, RequestTypeDef } from '@platform';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
+import { type DbExecutor, InjectDrizzle, type DrizzleDB, RequestRegistry, RequestTypeDef } from '@platform';
+import { REQUEST_TYPE } from '@shared-kernel';
+import { employees } from '../../../../../db/schema';
+import { GraphProvisioningService } from './graph-provisioning.service';
 
 export interface OnboardingPayload extends Record<string, unknown> {
   /** The employee being onboarded. */
@@ -9,6 +13,11 @@ export interface OnboardingPayload extends Record<string, unknown> {
   startDate: string;
   department?: string;
   jobTitle?: string;
+  managerName?: string;
+  equipmentType?: string;
+  preferredOs?: string;
+  equipmentNote?: string;
+  accessNeeds?: string[];
 }
 
 /**
@@ -26,7 +35,9 @@ export interface OnboardingPayload extends Record<string, unknown> {
 export class OnboardingTypeDef
   implements RequestTypeDef<OnboardingPayload>, OnModuleInit
 {
-  readonly type = 'onboarding';
+  private readonly logger = new Logger(OnboardingTypeDef.name);
+
+  readonly type = REQUEST_TYPE.ONBOARDING;
   /** Fallback for single-step compatibility; not used in multi-step mode. */
   readonly requiredApprovalPermission = 'onboarding.complete';
   readonly allowSelfApproval = false;
@@ -39,15 +50,35 @@ export class OnboardingTypeDef
     { step: 3, requiredPermission: 'onboarding.complete' },
   ];
 
-  constructor(private readonly registry: RequestRegistry) {}
+  constructor(
+    private readonly registry: RequestRegistry,
+    @InjectDrizzle() private readonly db: DrizzleDB,
+    private readonly graphProvisioning: GraphProvisioningService,
+  ) {}
 
   onModuleInit(): void {
     this.registry.register(this);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async onApprove(_payload: OnboardingPayload, _requestId: string, _approverId: string, _tx: DbExecutor): Promise<void> {
     // No domain side-effects needed on final approval.
     // The controller records the audit event after the engine call returns.
+  }
+
+  async afterApprove(payload: OnboardingPayload): Promise<void> {
+    if (!this.graphProvisioning.isEnabled()) return;
+
+    const [row] = await this.db
+      .select({ entraOid: employees.entraOid })
+      .from(employees)
+      .where(eq(employees.id, payload.employeeId))
+      .limit(1);
+
+    if (!row?.entraOid) {
+      this.logger.warn(`Onboarding afterApprove: no Entra OID for employee ${payload.employeeId}, skipping Graph enable`);
+      return;
+    }
+
+    await this.graphProvisioning.enableEntraUser(row.entraOid);
   }
 }

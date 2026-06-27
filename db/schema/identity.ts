@@ -21,6 +21,8 @@ export const employees = identitySchema.table(
     /** Application roles, e.g. ['it-admin','security']. Drives RBAC. */
     roles: jsonb('roles').notNull().$type<string[]>().default([]),
     status: employeeStatusEnum('status').notNull().default('active'),
+    /** S3 stored_files.id for the employee's profile photo — null until uploaded. */
+    photoStorageKey: varchar('photo_storage_key', { length: 512 }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

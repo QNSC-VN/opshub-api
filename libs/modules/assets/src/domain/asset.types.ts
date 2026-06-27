@@ -16,6 +16,8 @@ export interface Asset {
   warrantyExpiry: string | null;
   specs: Record<string, unknown>;
   assignedTo: string | null;
+  /** S3 object key for the asset photo; null until uploaded. */
+  photoStorageKey: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
