@@ -43,7 +43,7 @@ permissions:
   contents: read
 
 env:
-  GITOPS_SHA: v1.0.0   # pin qnsc-gitops to a known commit
+  GITOPS_SHA: v1.0.1   # pin qnsc-gitops to a known commit
 
 jobs:
   # ─────────────────────────────────────────────────────────────────────────
