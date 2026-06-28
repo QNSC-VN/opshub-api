@@ -93,7 +93,7 @@ jobs:
           languages: javascript-typescript
           queries: security-and-quality
 
-      - uses: QNSC-VN/qnsc-gitops/actions/setup-node-pnpm@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+      - uses: QNSC-VN/qnsc-gitops/actions/setup-node-pnpm@v1.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           pnpm-version: ${{ env.PNPM_VERSION }}
@@ -122,7 +122,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: QNSC-VN/qnsc-gitops/actions/scan-secrets@947bc9bd8e130065082f9a2e15e4f61cfbb736ca
+      - uses: QNSC-VN/qnsc-gitops/actions/scan-secrets@v1.0.0
         with:
           fail-on-leak: "true"
           scan-depth: "0"
