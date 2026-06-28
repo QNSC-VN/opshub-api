@@ -51,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: QNSC-VN/qnsc-gitops/actions/setup-aws-oidc@v1.0.1
+      - uses: QNSC-VN/qnsc-gitops/actions/setup-aws-oidc@v1
         with:
           role-arn: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/opshub-github-deploy
           aws-region: ${{ env.AWS_REGION }}
@@ -103,7 +103,7 @@ jobs:
             --task-definition "$NEW_TD_ARN"
 
       - name: Wait for services to stabilise
-        uses: QNSC-VN/qnsc-gitops/actions/verify-ecs-deploy@v1.0.1
+        uses: QNSC-VN/qnsc-gitops/actions/verify-ecs-deploy@v1
         with:
           cluster: ${{ vars.ECS_CLUSTER }}
           services: "${{ vars.ECS_API_SERVICE }},${{ vars.ECS_WORKER_SERVICE }}"
