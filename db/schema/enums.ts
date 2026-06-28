@@ -61,7 +61,12 @@ export const findingStatusEnum = pgEnum('finding_status', [
   'resolved',
   'risk_accepted',
 ]);
-export const findingSeverityEnum = pgEnum('finding_severity', ['low', 'medium', 'high', 'critical']);
+export const findingSeverityEnum = pgEnum('finding_severity', [
+  'low',
+  'medium',
+  'high',
+  'critical',
+]);
 export const softwareListingEnum = pgEnum('software_listing', [
   'whitelisted',
   'blacklisted',
@@ -91,5 +96,23 @@ export const leaveStatusEnum = pgEnum('leave_status', [
 export const overtimeStatusEnum = pgEnum('overtime_status', ['pending', 'approved', 'rejected']);
 export const shiftTypeEnum = pgEnum('shift_type', ['night', 'on_call', 'weekend']);
 
+// ── Licenses ───────────────────────────────────────────────────────────────
+export const licenseTypeEnum = pgEnum('license_type', [
+  'perpetual',
+  'subscription',
+  'per_seat',
+  'concurrent',
+]);
+export const licenseStatusEnum = pgEnum('license_status', [
+  'active',
+  'expiring_soon',
+  'expired',
+  'cancelled',
+]);
+
 // ── Storage ──────────────────────────────────────────────────────────────────
-export const storedFileStatusEnum = pgEnum('stored_file_status', ['pending', 'completed', 'deleted']);
+export const storedFileStatusEnum = pgEnum('stored_file_status', [
+  'pending',
+  'completed',
+  'deleted',
+]);

@@ -1,0 +1,1 @@
+DROP TABLE "workforce"."attendance_logs" CASCADE;

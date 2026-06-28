@@ -10,20 +10,17 @@ import { JwtAuthGuard } from './jwt.guard';
 import { RoleGuard } from './role.guard';
 import { PolicyGuard } from './policy.guard';
 import type { JwtPayload } from './jwt.strategy';
-import type { ResourceAttrs } from './authz.types';
+import {
+  IS_PUBLIC_KEY,
+  ROLES_KEY,
+  PERMISSION_KEY,
+  type ScopeResolver,
+  type PermissionRequirement,
+} from './auth.metadata';
 
-export const IS_PUBLIC_KEY = 'isPublic';
-export const ROLES_KEY = 'requiredRoles';
-export const PERMISSION_KEY = 'requiredPermission';
-
-/** Resolves the acted-upon resource's attributes from the request, for scoped checks. */
-export type ScopeResolver = (req: unknown) => ResourceAttrs | Promise<ResourceAttrs>;
-
-/** Metadata attached by @RequirePermission and read by the PolicyGuard. */
-export interface PermissionRequirement {
-  permission: string;
-  scopeFrom?: ScopeResolver;
-}
+// Re-exported for backwards compatibility with existing `@platform`/`./decorators`
+// importers; the canonical definitions now live in ./auth.metadata.
+export { IS_PUBLIC_KEY, ROLES_KEY, PERMISSION_KEY, type ScopeResolver, type PermissionRequirement };
 
 /** Mark a route as unauthenticated (skip JwtAuthGuard). */
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);

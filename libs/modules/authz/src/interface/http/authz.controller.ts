@@ -10,8 +10,14 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
-import { ApiCreatedResponse, ApiNoContentResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ApiCommonErrors, CurrentUser, RequirePermission } from '@platform';
+import {
+  ApiCreatedResponse,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
+import { ApiCommonErrors, Auth, CurrentUser, RequirePermission } from '@platform';
 import type { JwtPayload, Permission, RoleAssignment, RoleWithPermissions } from '@platform';
 import { DelegationService, type ApprovalDelegation } from '@platform';
 import { AuditService } from '@modules/audit';
@@ -123,7 +129,9 @@ export class AuthzController {
 
   @Put('roles/:id/permissions')
   @RequirePermission('rbac.manage')
-  @ApiOperation({ summary: 'Replace a role’s permission set' })  @ApiOkResponse({ type: RoleResponseDto })  @ApiCommonErrors(401, 403, 404, 422)
+  @ApiOperation({ summary: 'Replace a role’s permission set' })
+  @ApiOkResponse({ type: RoleResponseDto })
+  @ApiCommonErrors(401, 403, 404, 422)
   async setRolePermissions(
     @Param('id') id: string,
     @Body() dto: SetRolePermissionsDto,
@@ -163,10 +171,10 @@ export class AuthzController {
 
   @Get('users/:userId/assignments')
   @RequirePermission('rbac.read')
-  @ApiOperation({ summary: 'List a user’s role assignments' })  @ApiOkResponse({ type: [RoleAssignmentResponseDto] })  @ApiCommonErrors(401, 403)
-  async listUserAssignments(
-    @Param('userId') userId: string,
-  ): Promise<RoleAssignmentResponseDto[]> {
+  @ApiOperation({ summary: 'List a user’s role assignments' })
+  @ApiOkResponse({ type: [RoleAssignmentResponseDto] })
+  @ApiCommonErrors(401, 403)
+  async listUserAssignments(@Param('userId') userId: string): Promise<RoleAssignmentResponseDto[]> {
     return (await this.authz.listUserAssignments(userId)).map(toAssignmentDto);
   }
 
@@ -195,7 +203,12 @@ export class AuthzController {
       action: 'rbac.role_assigned',
       resourceType: 'role_assignment',
       resourceId: assignment.id,
-      metadata: { userId: dto.userId, roleId: dto.roleId, scopeType: dto.scopeType, scopeId: dto.scopeId ?? null },
+      metadata: {
+        userId: dto.userId,
+        roleId: dto.roleId,
+        scopeType: dto.scopeType,
+        scopeId: dto.scopeId ?? null,
+      },
     });
     return toAssignmentDto(assignment);
   }
@@ -206,10 +219,7 @@ export class AuthzController {
   @ApiOperation({ summary: 'Revoke a role assignment' })
   @ApiNoContentResponse()
   @ApiCommonErrors(401, 403, 404)
-  async revokeAssignment(
-    @Param('id') id: string,
-    @CurrentUser() user: JwtPayload,
-  ): Promise<void> {
+  async revokeAssignment(@Param('id') id: string, @CurrentUser() user: JwtPayload): Promise<void> {
     await this.authz.revokeAssignment(id, { sub: user.sub, email: user.email });
     void this.audit.record({
       actorId: user.sub,
@@ -223,6 +233,7 @@ export class AuthzController {
   // ── Approval Delegation ────────────────────────────────────────────────────
 
   @Post('delegations')
+  @Auth()
   @ApiOperation({
     summary: 'Create an approval delegation',
     description:
@@ -254,6 +265,7 @@ export class AuthzController {
   }
 
   @Get('delegations')
+  @Auth()
   @ApiOperation({
     summary: 'List approval delegations',
     description:
@@ -274,6 +286,7 @@ export class AuthzController {
   }
 
   @Delete('delegations/:id')
+  @Auth()
   @HttpCode(204)
   @ApiOperation({ summary: 'Revoke an approval delegation' })
   @ApiNoContentResponse()

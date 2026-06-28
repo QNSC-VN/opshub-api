@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PermissionDeniedException } from '../errors/exceptions';
-import { ROLES_KEY } from './decorators';
+import { ROLES_KEY } from './auth.metadata';
 import type { JwtPayload } from './jwt.strategy';
 
 /**

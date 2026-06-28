@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PermissionDeniedException, UnauthorizedException } from '../errors/exceptions';
 import { AuthzService } from './authz.service';
-import { PERMISSION_KEY, type PermissionRequirement } from './decorators';
+import { PERMISSION_KEY, type PermissionRequirement } from './auth.metadata';
 import type { JwtPayload } from './jwt.strategy';
 
 /**
