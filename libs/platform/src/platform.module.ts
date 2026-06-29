@@ -43,21 +43,17 @@ import { StorageService } from './storage/storage.service';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [AppConfigService],
-      useFactory: (config: AppConfigService) => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      useFactory: (config: AppConfigService): any => ({
         privateKey: config.get('JWT_PRIVATE_KEY'),
         publicKey: config.get('JWT_PUBLIC_KEY'),
         signOptions: {
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore: @types/jsonwebtoken 9.x omits EdDSA; runtime jsonwebtoken supports it
           algorithm: 'EdDSA',
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
-          expiresIn: config.get('JWT_ACCESS_EXPIRY') as any,
+          expiresIn: config.get('JWT_ACCESS_EXPIRY'),
           issuer: config.get('JWT_ISSUER'),
           audience: config.get('JWT_AUDIENCE'),
         },
         verifyOptions: {
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore: @types/jsonwebtoken 9.x omits EdDSA; runtime jsonwebtoken supports it
           algorithms: ['EdDSA'],
           issuer: config.get('JWT_ISSUER'),
           audience: config.get('JWT_AUDIENCE'),
