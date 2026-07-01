@@ -49,7 +49,7 @@ jobs:
       ENVIRONMENT: ${{ inputs.environment }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: QNSC-VN/qnsc-gitops/actions/setup-aws-oidc@v1
         with:
